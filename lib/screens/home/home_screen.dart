@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_sizes.dart';
+import '../../models/extra_order_model.dart';
 import '../../models/order_model.dart';
 import '../../models/product_model.dart';
 import '../../models/store_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/extra_order_service.dart';
 import '../../services/order_service.dart';
 import '../../services/product_service.dart';
 import '../../services/store_service.dart';
 import '../../widgets/app_bottom_nav.dart';
+import '../../widgets/extra_order_summary_card.dart';
+import '../extra_order/extra_order_detail_screen.dart';
 import '../menu/menu_screen.dart';
 import '../order/create_order_sheet.dart';
 import '../order/extra_order_sheet.dart';
@@ -28,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   User? _user;
   List<Order> _todayOrders = [];
+  List<ExtraOrder> _todayExtraOrders = [];
   List<Product> _products = [];
   List<Store> _stores = [];
 
@@ -56,6 +61,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         ProductService.getAll(limit: 200),
         StoreService.getAll(limit: 500),
+        ExtraOrderService.getAll(
+          startDate: startOfDay,
+          endDate: endOfDay,
+        ),
       ]);
 
       if (mounted) {
@@ -64,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _todayOrders = results[1] as List<Order>;
           _products = results[2] as List<Product>;
           _stores = results[3] as List<Store>;
+          _todayExtraOrders = results[4] as List<ExtraOrder>;
         });
       }
     } catch (e) {
@@ -86,6 +96,16 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => StoreDetailScreen(store: store),
+      ),
+    );
+    if (mounted) _load();
+  }
+
+  Future<void> _openExtraOrderDetail(ExtraOrder order) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExtraOrderDetailScreen(orderId: order.id),
       ),
     );
     if (mounted) _load();
@@ -163,11 +183,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (choice == null) return;
 
     if (choice == 'REGULAR') {
-      // Order biasa — pilih toko dari rute
       final result = await CreateOrderSheet.show(context);
       if (result == true && mounted) _load();
     } else {
-      // Extra order — ketik nama toko manual
       final todayStoreNames = _todayOrders
           .map((o) => o.store?.name ?? '')
           .where((n) => n.isNotEmpty)
@@ -277,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // ============ TITLE ============
+            // ============ TITLE: DAFTAR TOKO ============
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -315,6 +333,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // ============ LIST TOKO ============
             _buildBody(),
+
+            // ============ SECTION EXTRA ORDER ============
+            if (_todayExtraOrders.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSizes.lg,
+                    AppSizes.xl,
+                    AppSizes.lg,
+                    AppSizes.md,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.flash_on_rounded,
+                        size: 16,
+                        color: Color(0xFF7B1FA2),
+                      ),
+                      const SizedBox(width: 6),
+                      const Expanded(
+                        child: Text(
+                          'EXTRA ORDER HARI INI',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                            color: Color(0xFF7B1FA2),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${_todayExtraOrders.length} order',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF9CA3AF),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.lg,
+                ),
+                sliver: SliverList.separated(
+                  itemCount: _todayExtraOrders.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSizes.md),
+                  itemBuilder: (_, i) {
+                    final extra = _todayExtraOrders[i];
+                    return ExtraOrderSummaryCard(
+                      order: extra,
+                      onTap: () => _openExtraOrderDetail(extra),
+                    );
+                  },
+                ),
+              ),
+            ],
 
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
