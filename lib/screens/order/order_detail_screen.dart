@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-// import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/utils/formatters.dart';
@@ -47,78 +46,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  // ============ PENGIRIMAN ============
-  Future<void> _editDelivery() async {
-    if (_order == null) return;
-    final ctrl = TextEditingController(text: '${_order!.shippedQuantity}');
-    final formKey = GlobalKey<FormState>();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        ),
-        title: const Text('Update Pengiriman'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Total qty: ${_order!.totalQuantity}'),
-              const SizedBox(height: AppSizes.md),
-              TextFormField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Jumlah terkirim'),
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Angka tidak valid';
-                  if (n > _order!.totalQuantity) {
-                    return 'Maksimal ${_order!.totalQuantity}';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFF7043),
-            ),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    setState(() => _saving = true);
-    try {
-      await OrderService.updateDelivery(
-        _order!.id,
-        shippedQuantity: int.parse(ctrl.text),
-      );
-      await _load();
-      _snack('Pengiriman diperbarui');
-    } catch (e) {
-      _snack('Gagal: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   /// Foto bukti KIRIM dengan timestamp
   Future<void> _captureDeliveryProof() async {
     final picked = await ImagePickerHelper.pickImage(context);
@@ -132,7 +59,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         label: 'BUKTI PENGIRIMAN',
       );
 
-      // Batas 2MB (base64 akan ~1.33x ukuran asli, jadi masih < 2.8MB)
       if (stamped.length > 2 * 1024 * 1024) {
         _snack(
             'Gambar masih terlalu besar. Coba foto dengan resolusi lebih rendah.');
@@ -141,50 +67,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
+      // ✅ Backend otomatis mengubah status jadi COMPLETED
       await OrderService.updateDelivery(
         _order!.id,
         deliveryProof: b64,
       );
       await _load();
-      _snack('Bukti pengiriman terkirim');
-    } catch (e) {
-      _snack('Gagal: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _completeOrder() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        ),
-        title: const Text('Selesaikan Order'),
-        content: const Text('Yakin tandai order ini sebagai COMPLETED?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
-            ),
-            child: const Text('Selesai'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    setState(() => _saving = true);
-    try {
-      await OrderService.updateDelivery(_order!.id, status: 'COMPLETED');
-      await _load();
-      _snack('Order diselesaikan');
+      _snack('Pengiriman selesai!');
     } catch (e) {
       _snack('Gagal: $e');
     } finally {
@@ -193,7 +82,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   // ============ PEMBAYARAN ============
-  /// Dialog pilih metode bayar
   Future<void> _choosePaymentMethod() async {
     final method = await showModalBottomSheet<String>(
       context: context,
@@ -313,7 +201,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
-  /// CASH: langsung tandai lunas
   Future<void> _setPaidCash() async {
     setState(() => _saving = true);
     try {
@@ -331,7 +218,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  /// TRANSFER: foto bukti + timestamp, lalu set PAID
   Future<void> _pickAndUploadProofTransfer() async {
     final picked = await ImagePickerHelper.pickImage(context);
     if (picked == null) return;
@@ -345,8 +231,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
 
       if (stamped.length > 2 * 1024 * 1024) {
-        _snack(
-            'Gambar masih terlalu besar. Coba lagi dengan resolusi lebih rendah.');
+        _snack('Gambar masih terlalu besar. Coba lagi.');
         return;
       }
 
@@ -418,8 +303,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
         ],
       ),
-      bottomNavigationBar:
-          (_order != null && _order!.isEditable) ? _buildActions() : null,
+      bottomNavigationBar: _order != null ? _buildActions() : null,
     );
   }
 
@@ -789,95 +673,90 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Widget _buildActions() {
     final o = _order!;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSizes.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Baris 1: Pembayaran & Bukti Kirim
-              if (!o.isPaid)
-                Row(
-                  children: [
-                    Expanded(
-                      child: _actionButton(
-                        icon: Icons.account_balance_wallet,
-                        label: 'Bayar',
-                        color: const Color(0xFF2E7D32),
-                        onTap: _saving ? null : _choosePaymentMethod,
-                      ),
-                    ),
-                    const SizedBox(width: AppSizes.sm),
-                    Expanded(
-                      child: _actionButton(
-                        icon: Icons.camera_alt,
-                        label: 'Bukti Kirim',
-                        color: const Color(0xFF7B1FA2),
-                        outlined: true,
-                        onTap: _saving ? null : _captureDeliveryProof,
-                      ),
-                    ),
-                  ],
-                )
-              else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: _actionButton(
-                        icon: Icons.camera_alt,
-                        label: o.hasDeliveryProof
-                            ? 'Ganti Bukti Kirim'
-                            : 'Bukti Kirim',
-                        color: const Color(0xFF7B1FA2),
-                        outlined: true,
-                        onTap: _saving ? null : _captureDeliveryProof,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: AppSizes.sm),
 
-              // Baris 2: Update Kirim & Selesaikan
-              Row(
-                children: [
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.edit,
-                      label: 'Update Kirim',
-                      color: const Color(0xFF1976D2),
-                      outlined: true,
-                      onTap: _saving ? null : _editDelivery,
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.done_all,
-                      label: 'Selesaikan',
-                      color: const Color(0xFFFF7043),
-                      onTap: _saving ? null : _completeOrder,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    // 1. Jika masih DRAFT, kurir tidak bisa ngapa-ngapain
+    if (o.status == 'DRAFT') {
+      return Container(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        color: Colors.white,
+        child: const Text(
+          'Menunggu persetujuan (Approve) dari Admin',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+        ),
+      );
+    }
+
+    // 2. Jika sudah DELIVERED (Approved), kurir upload bukti kirim
+    if (o.status == 'DELIVERED') {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: _actionButton(
+              icon: Icons.camera_alt,
+              label: 'Upload Bukti Kirim & Selesaikan',
+              color: const Color(0xFFF57C00),
+              onTap: _saving ? null : _captureDeliveryProof,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    // 3. Jika COMPLETED tapi belum bayar, kurir bisa bayar
+    if (o.status == 'COMPLETED' && !o.isPaid) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: _actionButton(
+              icon: Icons.account_balance_wallet,
+              label: 'Bayar',
+              color: const Color(0xFF2E7D32),
+              onTap: _saving ? null : _choosePaymentMethod,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 4. Jika sudah COMPLETED dan LUNAS
+    if (o.status == 'COMPLETED' && o.isPaid) {
+      return Container(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        color: Colors.white,
+        child: const Text(
+          'Pesanan Selesai & Lunas',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _actionButton({
@@ -931,6 +810,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Color _statusColor(String s) {
     switch (s) {
+      case 'DRAFT':
+        return const Color(0xFF616161);
       case 'DELIVERED':
         return const Color(0xFF1976D2);
       case 'COMPLETED':
@@ -944,6 +825,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   IconData _statusIcon(String s) {
     switch (s) {
+      case 'DRAFT':
+        return Icons.edit_note;
       case 'DELIVERED':
         return Icons.local_shipping_rounded;
       case 'COMPLETED':
