@@ -17,8 +17,8 @@ class ExtraOrderService {
       {String? context}) {
     if (data is List) {
       return data
-          .where((e) => e is Map)
-          .map((e) => Map<String, dynamic>.from(e as Map))
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
           .toList();
     }
     throw Exception(
