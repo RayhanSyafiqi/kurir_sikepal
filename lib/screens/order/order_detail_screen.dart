@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart'; // ✅ TAMBAH INI
 import '../../core/constants/app_sizes.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/image_stamp.dart';
+import '../../core/utils/invoice_generator.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../widgets/status_badge.dart';
@@ -46,7 +49,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  /// Foto bukti KIRIM dengan timestamp
+  // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
     final picked = await ImagePickerHelper.pickImage(context);
     if (picked == null) return;
@@ -67,7 +70,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
-      // ✅ Backend otomatis mengubah status jadi COMPLETED
       await OrderService.updateDelivery(
         _order!.id,
         deliveryProof: b64,
@@ -252,6 +254,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // ============ CETAK INVOICE ============
+  Future<void> _printInvoice() async {
+    if (_order == null) return;
+    setState(() => _saving = true);
+    try {
+      final pdfBytes = await InvoiceGenerator.generate([_order!]);
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: 'Invoice_${_order!.id.substring(0, 6)}',
+      );
+    } catch (e) {
+      _snack('Gagal mencetak invoice: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -418,15 +437,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               _infoRow('Status', Formatters.paymentStatus(o.paymentStatus)),
               if (o.paymentMethod != null)
                 _infoRow(
-                  'Metode',
-                  o.paymentMethod == 'CASH' ? 'Cash' : 'Transfer',
-                ),
+                    'Metode', o.paymentMethod == 'CASH' ? 'Cash' : 'Transfer'),
               if (o.paymentProofAt != null)
                 _infoRow(
-                  'Waktu Bayar',
-                  DateFormat('dd MMM yyyy • HH:mm', 'id_ID')
-                      .format(o.paymentProofAt!),
-                ),
+                    'Waktu Bayar',
+                    DateFormat('dd MMM yyyy • HH:mm', 'id_ID')
+                        .format(o.paymentProofAt!)),
               if (o.hasPaymentProof)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSizes.md),
@@ -458,10 +474,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             [
               if (o.deliveryProofAt != null)
                 _infoRow(
-                  'Waktu',
-                  DateFormat('dd MMM yyyy • HH:mm', 'id_ID')
-                      .format(o.deliveryProofAt!),
-                ),
+                    'Waktu',
+                    DateFormat('dd MMM yyyy • HH:mm', 'id_ID')
+                        .format(o.deliveryProofAt!)),
               if (o.hasDeliveryProof)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSizes.sm),
@@ -501,11 +516,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 color: const Color(0xFFFFF3E0),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.restaurant_menu,
-                                size: 18,
-                                color: Color(0xFFE65100),
-                              ),
+                              child: const Icon(Icons.restaurant_menu,
+                                  size: 18, color: Color(0xFFE65100)),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -539,11 +551,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   Widget _card(
-    String title,
-    IconData icon,
-    Color color,
-    List<Widget> children,
-  ) {
+      String title, IconData icon, Color color, List<Widget> children) {
     return Container(
       padding: const EdgeInsets.all(AppSizes.md + 2),
       decoration: BoxDecoration(
@@ -674,7 +682,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget _buildActions() {
     final o = _order!;
 
-    // 1. Jika masih DRAFT, kurir tidak bisa ngapa-ngapain
+    // 1. DRAFT
     if (o.status == 'DRAFT') {
       return Container(
         padding: const EdgeInsets.all(AppSizes.lg),
@@ -687,7 +695,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 2. Jika sudah DELIVERED (Approved), kurir upload bukti kirim
+    // 2. DELIVERED
     if (o.status == 'DELIVERED') {
       return Container(
         decoration: BoxDecoration(
@@ -715,7 +723,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 3. Jika COMPLETED tapi belum bayar, kurir bisa bayar
+    // 3. COMPLETED & BELUM BAYAR
     if (o.status == 'COMPLETED' && !o.isPaid) {
       return Container(
         decoration: BoxDecoration(
@@ -743,15 +751,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 4. Jika sudah COMPLETED dan LUNAS
+    // 4. COMPLETED & LUNAS -> CETAK INVOICE
     if (o.status == 'COMPLETED' && o.isPaid) {
       return Container(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        color: Colors.white,
-        child: const Text(
-          'Pesanan Selesai & Lunas',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: _actionButton(
+              icon: Icons.print_rounded,
+              label: 'Cetak Invoice',
+              color: const Color(0xFF1976D2),
+              onTap: _saving ? null : _printInvoice,
+            ),
+          ),
         ),
       );
     }

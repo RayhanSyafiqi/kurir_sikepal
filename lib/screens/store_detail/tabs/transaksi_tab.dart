@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-// import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart'; // ✅ TAMBAH INI
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/image_picker_helper.dart';
 import '../../../core/utils/image_stamp.dart';
+import '../../../core/utils/invoice_generator.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 import '../../order/order_detail_screen.dart';
@@ -23,7 +26,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
   String? _error;
   String _filter = 'ALL';
 
-  // ✅ Multi-select state
   final Set<String> _selectedIds = {};
   bool _bulkProcessing = false;
 
@@ -46,7 +48,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
       if (mounted) {
         setState(() {
           _all = list;
-          // Bersihkan ID yang sudah tidak ada
           _selectedIds.removeWhere((id) => !list.any((o) => o.id == id));
         });
       }
@@ -73,7 +74,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
       _all.where((o) => o.isPaid).fold(0, (s, o) => s + o.totalAmount);
   double get _totalUnpaid => _totalAll - _totalPaid;
 
-  // ✅ Total order yang dipilih
   double get _selectedTotal {
     return _all
         .where((o) => _selectedIds.contains(o.id))
@@ -110,11 +110,9 @@ class _TransaksiTabState extends State<TransaksiTab> {
     setState(() => _selectedIds.clear());
   }
 
-  // ============ BULK PAYMENT ============
   Future<void> _processBulkPayment() async {
     if (_selectedIds.isEmpty) return;
 
-    // Pilih metode
     final method = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -202,7 +200,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
       final raw = await picked.readAsBytes();
       final stamped = await ImageStamp.addTimestamp(
         raw,
-        label: 'BUKTI TRANSFER ($_selectedCount ORDER)',
+        label: 'BUKTI TRANSFER (${_selectedCount} ORDER)',
       );
 
       if (stamped.length > 2 * 1024 * 1024) {
@@ -220,13 +218,14 @@ class _TransaksiTabState extends State<TransaksiTab> {
   Future<void> _executeBulkPayment(String method, String? proof) async {
     setState(() => _bulkProcessing = true);
 
-    // Simpan jumlah dulu sebelum clear
     final count = _selectedIds.length;
     final total = _selectedTotal;
+    final orderIds = _selectedIds.toList();
 
     try {
+      // ✅ HAPUS VARIABEL 'result' YANG TIDAK TERPAKAI
       await OrderService.bulkPayment(
-        orderIds: _selectedIds.toList(),
+        orderIds: orderIds,
         paymentMethod: method,
         paymentProof: proof,
       );
@@ -235,13 +234,13 @@ class _TransaksiTabState extends State<TransaksiTab> {
       _clearSelection();
       await _load();
 
-      // Tampilkan konfirmasi sukses
+      final paidOrders = _all.where((o) => orderIds.contains(o.id)).toList();
+
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-          ),
+              borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -276,27 +275,40 @@ class _TransaksiTabState extends State<TransaksiTab> {
                   color: Color(0xFF6B7280),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Metode: ${method == 'CASH' ? 'Cash' : 'Transfer'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: method == 'CASH'
-                      ? const Color(0xFF2E7D32)
-                      : const Color(0xFF1976D2),
-                ),
-              ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF7043),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Tutup'),
+                    ),
                   ),
-                  child: const Text('OK'),
-                ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          final pdfBytes =
+                              await InvoiceGenerator.generate(paidOrders);
+                          await Printing.layoutPdf(
+                            onLayout: (PdfPageFormat format) async => pdfBytes,
+                            name:
+                                'Invoice_Gabungan_${DateTime.now().millisecondsSinceEpoch}',
+                          );
+                        } catch (e) {
+                          _snack('Gagal mencetak invoice: $e');
+                        }
+                      },
+                      icon: const Icon(Icons.print, size: 18),
+                      label: const Text('Cetak Invoice'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1976D2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -411,11 +423,8 @@ class _TransaksiTabState extends State<TransaksiTab> {
               const SizedBox(height: AppSizes.md),
               _filterChips(),
               const SizedBox(height: AppSizes.md),
-
-              // Tombol pilih semua (kalau ada unpaid)
               if (_filter != 'PAID' && list.any((o) => !o.isPaid))
                 _selectAllButton(list),
-
               if (list.isEmpty)
                 _emptyFiltered()
               else
@@ -428,7 +437,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
             ],
           ),
         ),
-        // Bottom bar bulk
         if (_selectedCount > 0) _bulkBottomBar(),
       ],
     );
@@ -438,41 +446,24 @@ class _TransaksiTabState extends State<TransaksiTab> {
     return Row(
       children: [
         Expanded(
-          child: _summary(
-            'Total',
-            Formatters.currency(_totalAll),
-            const Color(0xFF1976D2),
-            Icons.receipt_long,
-          ),
+          child: _summary('Total', Formatters.currency(_totalAll),
+              const Color(0xFF1976D2), Icons.receipt_long),
         ),
         const SizedBox(width: AppSizes.sm),
         Expanded(
-          child: _summary(
-            'Lunas',
-            Formatters.currency(_totalPaid),
-            const Color(0xFF2E7D32),
-            Icons.check_circle,
-          ),
+          child: _summary('Lunas', Formatters.currency(_totalPaid),
+              const Color(0xFF2E7D32), Icons.check_circle),
         ),
         const SizedBox(width: AppSizes.sm),
         Expanded(
-          child: _summary(
-            'Piutang',
-            Formatters.currency(_totalUnpaid),
-            const Color(0xFFD32F2F),
-            Icons.access_time,
-          ),
+          child: _summary('Piutang', Formatters.currency(_totalUnpaid),
+              const Color(0xFFD32F2F), Icons.access_time),
         ),
       ],
     );
   }
 
-  Widget _summary(
-    String label,
-    String value,
-    Color color,
-    IconData icon,
-  ) {
+  Widget _summary(String label, String value, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(AppSizes.sm + 2),
       decoration: BoxDecoration(
@@ -519,16 +510,12 @@ class _TransaksiTabState extends State<TransaksiTab> {
         final active = _filter == c.$1;
         return Expanded(
           child: Padding(
-            padding: EdgeInsets.only(
-              right: c.$1 == 'UNPAID' ? 0 : AppSizes.sm,
-            ),
+            padding: EdgeInsets.only(right: c.$1 == 'UNPAID' ? 0 : AppSizes.sm),
             child: Material(
               color: active ? const Color(0xFFFFC107) : Colors.white,
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               child: InkWell(
-                onTap: () {
-                  setState(() => _filter = c.$1);
-                },
+                onTap: () => setState(() => _filter = c.$1),
                 borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
@@ -575,9 +562,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.md,
-              vertical: 10,
-            ),
+                horizontal: AppSizes.md, vertical: 10),
             child: Row(
               children: [
                 Icon(
@@ -644,7 +629,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
   Widget _txCard(Order o) {
     final isSelected = _selectedIds.contains(o.id);
-    final canSelect = !o.isPaid; // Lunas tidak bisa dipilih
+    final canSelect = !o.isPaid;
 
     return Material(
       color: Colors.white,
@@ -662,7 +647,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                 _load();
               },
         onLongPress: () async {
-          if (!canSelect) return;
           await Navigator.push(
             context,
             MaterialPageRoute(
@@ -684,7 +668,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
             padding: const EdgeInsets.all(AppSizes.md),
             child: Row(
               children: [
-                // Checkbox bulat
                 if (canSelect)
                   Padding(
                     padding: const EdgeInsets.only(right: AppSizes.md),
@@ -698,7 +681,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                       size: 26,
                     ),
                   ),
-                // Ikon status
                 Container(
                   width: 42,
                   height: 42,
@@ -754,9 +736,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: o.isPaid
                             ? const Color(0xFFE8F5E9)
@@ -785,7 +765,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
     );
   }
 
-  // ============ BULK BOTTOM BAR ============
   Widget _bulkBottomBar() {
     return Positioned(
       left: 0,
@@ -812,13 +791,11 @@ class _TransaksiTabState extends State<TransaksiTab> {
             padding: const EdgeInsets.all(AppSizes.md),
             child: Row(
               children: [
-                // Tombol clear
                 IconButton(
                   onPressed: _bulkProcessing ? null : _clearSelection,
                   icon: const Icon(Icons.close, color: Color(0xFF6B7280)),
                   tooltip: 'Batalkan',
                 ),
-                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -843,7 +820,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                     ],
                   ),
                 ),
-                // Tombol bayar
                 FilledButton.icon(
                   onPressed: _bulkProcessing ? null : _processBulkPayment,
                   icon: _bulkProcessing
@@ -867,9 +843,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
                     backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: AppSizes.lg,
-                      vertical: 12,
-                    ),
+                        horizontal: AppSizes.lg, vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                     ),
