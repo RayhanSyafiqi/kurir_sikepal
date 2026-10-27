@@ -15,6 +15,7 @@ class ImageStamp {
     Uint8List imageBytes, {
     DateTime? time,
     String? label,
+    String? locationText,
   }) async {
     final ts = time ?? DateTime.now();
 
@@ -55,9 +56,15 @@ class ImageStamp {
     // Format tanggal Indonesia
     final dateStr = DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(ts);
     final timeStr = DateFormat('HH:mm:ss').format(ts);
-    final text = label != null
+
+    // ✅ Perbaikan: Masukkan locationText ke dalam teks gambar
+    String text = label != null
         ? '$label\n$dateStr • $timeStr WIB'
         : '$dateStr\n$timeStr WIB';
+
+    if (locationText != null && locationText.isNotEmpty) {
+      text += '\n$locationText';
+    }
 
     final fontSize = width / 28;
 

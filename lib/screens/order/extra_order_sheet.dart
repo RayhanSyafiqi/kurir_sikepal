@@ -544,7 +544,7 @@ class _ExtraOrderSheetState extends State<ExtraOrderSheet> {
                     ),
                   ),
                   backgroundColor: const Color(0xFFF3E5F5),
-                  side: BorderSide(color: const Color(0xFFCE93D8)),
+                  side: const BorderSide(color: Color(0xFFCE93D8)),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   onPressed: () {
                     _storeName.text = name;

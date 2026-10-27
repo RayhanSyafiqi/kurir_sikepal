@@ -66,9 +66,9 @@ class ExtraOrder {
           : DateTime.tryParse(json['deliveryProofAt'].toString()),
       items: json['items'] is List
           ? (json['items'] as List)
-              .where((e) => e is Map)
+              .whereType<Map>()
               .map((e) => ExtraOrderItem.fromJson(
-                    Map<String, dynamic>.from(e as Map),
+                    Map<String, dynamic>.from(e),
                   ))
               .toList()
           : const [],

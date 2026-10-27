@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
-import 'package:pdf/pdf.dart'; // ✅ TAMBAH INI
+import 'package:pdf/pdf.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/image_stamp.dart';
@@ -51,6 +51,68 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
+    final qtyCtrl = TextEditingController(text: '${_order!.totalQuantity}');
+    final formKey = GlobalKey<FormState>();
+
+    // ✅ 1. Tampilkan dialog konfirmasi jumlah yang benar-benar dikirim
+    final confirmQty = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+        title: const Text('Konfirmasi Jumlah Kirim'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Apakah semua produk berhasil dikirim? Jika ada barang yang tidak diterima toko, silakan ubah jumlah di bawah ini.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: AppSizes.md),
+              TextFormField(
+                controller: qtyCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Jumlah Terkirim (pcs)',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  if (n == null || n < 0) return 'Angka tidak valid';
+                  if (n > _order!.totalQuantity)
+                    return 'Maksimal ${_order!.totalQuantity}';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFF57C00)),
+            child: const Text('Lanjut Foto'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmQty != true) return;
+    final actualShipped = int.parse(qtyCtrl.text);
+
+    // ✅ 2. Buka kamera setelah jumlah dikonfirmasi
     final picked = await ImagePickerHelper.pickImage(context);
     if (picked == null) return;
 
@@ -70,8 +132,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
+      // ✅ 3. Kirim jumlah aktual & bukti foto ke API
       await OrderService.updateDelivery(
         _order!.id,
+        shippedQuantity: actualShipped,
         deliveryProof: b64,
       );
       await _load();
@@ -83,7 +147,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  // ============ PEMBAYARAN ============
   Future<void> _choosePaymentMethod() async {
     final method = await showModalBottomSheet<String>(
       context: context,

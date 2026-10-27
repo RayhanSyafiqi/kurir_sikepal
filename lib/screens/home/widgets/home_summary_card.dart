@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../models/user_model.dart';
+import '../../attendance/attendance_sheet.dart'; // ✅ Import AttendanceSheet
 
 class HomeSummaryCard extends StatelessWidget {
   final User? user;
@@ -54,7 +55,13 @@ class HomeSummaryCard extends StatelessWidget {
                       icon: Icons.how_to_reg_rounded,
                       label: 'ABSENSI\nMASUK',
                       color: const Color(0xFF1B5E20),
-                      onTap: () => _toast(context, 'Absensi masuk'),
+                      onTap: () async {
+                        // ✅ Panggil Bottom Sheet Absensi
+                        final success = await AttendanceSheet.show(context);
+                        if (success == true) {
+                          _toast(context, 'Absensi berhasil terkirim!');
+                        }
+                      },
                     ),
                   ),
                   const SizedBox(width: AppSizes.sm),

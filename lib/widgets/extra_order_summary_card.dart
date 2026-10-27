@@ -115,15 +115,15 @@ class ExtraOrderSummaryCard extends StatelessWidget {
               const SizedBox(height: 10),
               Divider(color: Colors.grey.shade200, height: 1),
               const SizedBox(height: 8),
-              Row(
+              const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.receipt_long_rounded,
                     size: 14,
                     color: Color(0xFF7B1FA2),
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
+                  SizedBox(width: 6),
+                  Text(
                     'Lihat Detail Extra Order',
                     style: TextStyle(
                       fontSize: 11,
@@ -131,8 +131,8 @@ class ExtraOrderSummaryCard extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const Spacer(),
-                  const Icon(
+                  Spacer(),
+                  Icon(
                     Icons.chevron_right,
                     color: Color(0xFF9CA3AF),
                   ),
