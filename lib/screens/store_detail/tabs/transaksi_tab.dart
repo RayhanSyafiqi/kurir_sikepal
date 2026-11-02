@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-// import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
-import 'package:pdf/pdf.dart'; // ✅ TAMBAH INI
+import 'package:pdf/pdf.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/image_picker_helper.dart';
@@ -10,6 +9,7 @@ import '../../../core/utils/image_stamp.dart';
 import '../../../core/utils/invoice_generator.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
+import '../../../widgets/date_filter_widget.dart'; // ✅ TAMBAH INI
 import '../../order/order_detail_screen.dart';
 
 class TransaksiTab extends StatefulWidget {
@@ -25,6 +25,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
   bool _loading = true;
   String? _error;
   String _filter = 'ALL';
+  DateTime _selectedDate = DateTime.now();
 
   final Set<String> _selectedIds = {};
   bool _bulkProcessing = false;
@@ -41,8 +42,15 @@ class _TransaksiTabState extends State<TransaksiTab> {
       _error = null;
     });
     try {
+      final start =
+          DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+      final end = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, 23, 59, 59);
+      // ✅ startDate & endDate sekarang BENAR-BENAR dipakai
       final list = await OrderService.getAll(
         storeId: widget.storeId,
+        startDate: start,
+        endDate: end,
         limit: 200,
       );
       if (mounted) {
@@ -223,7 +231,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final orderIds = _selectedIds.toList();
 
     try {
-      // ✅ HAPUS VARIABEL 'result' YANG TIDAK TERPAKAI
       await OrderService.bulkPayment(
         orderIds: orderIds,
         paymentMethod: method,
@@ -407,37 +414,52 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
     final list = _filtered;
 
-    return Stack(
+    // ✅ Struktur baru: DateFilterWidget di atas, sisanya di Expanded
+    return Column(
       children: [
-        RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: EdgeInsets.only(
-              left: AppSizes.lg,
-              right: AppSizes.lg,
-              top: AppSizes.lg,
-              bottom: _selectedCount > 0 ? 120 : AppSizes.lg,
-            ),
+        DateFilterWidget(
+          selectedDate: _selectedDate,
+          onDateChanged: (date) {
+            setState(() => _selectedDate = date);
+            _load();
+          },
+        ),
+        Expanded(
+          child: Stack(
             children: [
-              _summaryRow(),
-              const SizedBox(height: AppSizes.md),
-              _filterChips(),
-              const SizedBox(height: AppSizes.md),
-              if (_filter != 'PAID' && list.any((o) => !o.isPaid))
-                _selectAllButton(list),
-              if (list.isEmpty)
-                _emptyFiltered()
-              else
-                ...list.map(
-                  (o) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSizes.sm + 2),
-                    child: _txCard(o),
+              RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: EdgeInsets.only(
+                    left: AppSizes.lg,
+                    right: AppSizes.lg,
+                    top: AppSizes.lg,
+                    bottom: _selectedCount > 0 ? 120 : AppSizes.lg,
                   ),
+                  children: [
+                    _summaryRow(),
+                    const SizedBox(height: AppSizes.md),
+                    _filterChips(),
+                    const SizedBox(height: AppSizes.md),
+                    if (_filter != 'PAID' && list.any((o) => !o.isPaid))
+                      _selectAllButton(list),
+                    if (list.isEmpty)
+                      _emptyFiltered()
+                    else
+                      ...list.map(
+                        (o) => Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: AppSizes.sm + 2),
+                          child: _txCard(o),
+                        ),
+                      ),
+                  ],
                 ),
+              ),
+              if (_selectedCount > 0) _bulkBottomBar(),
             ],
           ),
         ),
-        if (_selectedCount > 0) _bulkBottomBar(),
       ],
     );
   }

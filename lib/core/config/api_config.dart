@@ -15,6 +15,7 @@ class ApiConfig {
   static const String products = '/api/mobile/products';
   static const String bulkPayment = '/api/mobile/orders/bulk-payment';
   static const String extraOrders = '/api/mobile/extra-orders';
+  static const String users = '/api/mobile/users/me';
 
   static String storeDetail(String id) => '$stores/$id';
   static String orderDetail(String id) => '$orders/$id';

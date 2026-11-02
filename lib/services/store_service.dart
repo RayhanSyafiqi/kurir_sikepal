@@ -10,6 +10,7 @@ class StoreService {
     String? status,
     int page = 1,
     int limit = 100,
+    DateTime? date,
   }) async {
     final res = await ApiClient.get(
       ApiConfig.stores,
@@ -18,6 +19,7 @@ class StoreService {
         'limit': '$limit',
         if (search != null && search.isNotEmpty) 'search': search,
         if (status != null && status.isNotEmpty) 'status': status,
+        if (date != null) 'date': date.toUtc().toIso8601String(),
       },
     );
     return (res['data'] as List)

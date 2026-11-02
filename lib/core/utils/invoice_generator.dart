@@ -10,134 +10,97 @@ class InvoiceGenerator {
     final grandTotal = orders.fold<double>(0, (sum, o) => sum + o.totalAmount);
 
     pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+      pw.Page(
+        pageFormat: const PdfPageFormat(
+          80 * PdfPageFormat.mm, // lebar 80mm (thermal)
+          297 * PdfPageFormat.mm, // tinggi (A4 sebagai fallback)
+          marginAll: 3 * PdfPageFormat.mm,
+        ), // ✅ Ukuran kertas thermal 80mm
+        margin: const pw.EdgeInsets.all(10),
         build: (pw.Context context) {
-          return [
-            // ================= HEADER =================
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      orders.length > 1 ? 'INVOICE GABUNGAN' : 'INVOICE',
-                      style: pw.TextStyle(
-                          fontSize: 28, fontWeight: pw.FontWeight.bold),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      orders.length > 1
-                          ? 'Total ${orders.length} Transaksi'
-                          : '#${orders.first.id.substring(orders.first.id.length - 6).toUpperCase()}',
-                      style: const pw.TextStyle(
-                          fontSize: 12, color: PdfColors.grey600),
-                    ),
-                  ],
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              // HEADER
+              pw.Center(
+                child: pw.Text(
+                  'SIKEPAL APP',
+                  style: pw.TextStyle(
+                      fontSize: 16, fontWeight: pw.FontWeight.bold),
                 ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(
-                      'SIKEPAL APP',
-                      style: pw.TextStyle(
-                          fontSize: 20,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.orange800),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Tanggal Cetak: ${Formatters.date(DateTime.now())}',
-                      style: const pw.TextStyle(
-                          fontSize: 10, color: PdfColors.grey600),
-                    ),
-                  ],
+              ),
+              pw.Center(
+                child: pw.Text(
+                  orders.length > 1 ? 'INVOICE GABUNGAN' : 'INVOICE',
+                  style: const pw.TextStyle(fontSize: 12),
                 ),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Divider(thickness: 2, color: PdfColors.grey400),
-            pw.SizedBox(height: 20),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
 
-            // ================= TABEL PRODUK =================
-            pw.TableHelper.fromTextArray(
-              headers: ['Tanggal', 'Toko / Kurir', 'Produk', 'Qty', 'Subtotal'],
-              data: orders.expand((order) {
+              // INFO
+              pw.Text('Tgl: ${Formatters.date(orders.first.date)}',
+                  style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('Kurir: ${orders.first.courierName ?? "-"}',
+                  style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('Toko: ${orders.first.store?.name ?? "-"}',
+                  style: const pw.TextStyle(fontSize: 10)),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 4),
+
+              // PRODUK
+              ...orders.expand((order) {
                 return order.items.map((item) {
                   final subtotal = item.quantity * order.price;
-                  return [
-                    Formatters.date(order.date),
-                    '${order.store?.name ?? "-"}\n(Kurir: ${order.courierId.isNotEmpty ? "Kurir" : "-"})', // Fallback jika nama tidak ada di model
-                    item.productName ?? '-',
-                    item.quantity.toString(),
-                    Formatters.currency(subtotal),
-                  ];
+                  return pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(item.productName ?? '-',
+                          style: pw.TextStyle(
+                              fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                              '${item.quantity} x ${Formatters.currency(order.price)}',
+                              style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text(Formatters.currency(subtotal),
+                              style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 6),
+                    ],
+                  );
                 });
-              }).toList(),
-              border: pw.TableBorder.all(color: PdfColors.grey300),
-              headerStyle: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.orange),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellAlignments: {
-                0: pw.Alignment.centerLeft,
-                1: pw.Alignment.centerLeft,
-                2: pw.Alignment.centerLeft,
-                3: pw.Alignment.center,
-                4: pw.Alignment.centerRight,
-              },
-              cellStyle: const pw.TextStyle(fontSize: 10),
-            ),
-            pw.SizedBox(height: 20),
+              }),
 
-            // ================= TOTAL =================
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text(
-                  'Total Tagihan Lunas: ',
-                  style: pw.TextStyle(
-                      fontSize: 12, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.Text(
-                  Formatters.currency(grandTotal),
-                  style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.orange800),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 60),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 4),
 
-            // ================= TANDA TANGAN =================
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  children: [
-                    pw.Text('Tanda Tangan Kurir',
-                        style: const pw.TextStyle(fontSize: 10)),
-                    pw.SizedBox(height: 60),
-                    pw.Text('____________________',
-                        style: const pw.TextStyle(fontSize: 10)),
-                  ],
+              // TOTAL
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('TOTAL',
+                      style: pw.TextStyle(
+                          fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(Formatters.currency(grandTotal),
+                      style: pw.TextStyle(
+                          fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+
+              pw.SizedBox(height: 16),
+              pw.Center(
+                child: pw.Text(
+                  'Terima Kasih',
+                  style: pw.TextStyle(
+                      fontSize: 10, fontStyle: pw.FontStyle.italic),
                 ),
-                pw.Column(
-                  children: [
-                    pw.Text('Tanda Tangan Toko',
-                        style: const pw.TextStyle(fontSize: 10)),
-                    pw.SizedBox(height: 60),
-                    pw.Text('____________________',
-                        style: const pw.TextStyle(fontSize: 10)),
-                  ],
-                ),
-              ],
-            ),
-          ];
+              ),
+            ],
+          );
         },
       ),
     );

@@ -4,6 +4,7 @@ import '../../../models/order_model.dart';
 import '../../../models/product_model.dart';
 import '../../../services/order_service.dart';
 import '../../../services/product_service.dart';
+import '../../../widgets/date_filter_widget.dart'; // ✅ TAMBAH
 
 class ProdukTab extends StatefulWidget {
   final String storeId;
@@ -18,6 +19,7 @@ class _ProdukTabState extends State<ProdukTab> {
   List<Product> _products = [];
   bool _loading = true;
   String? _error;
+  DateTime _selectedDate = DateTime.now(); // ✅ State tanggal
 
   @override
   void initState() {
@@ -31,10 +33,22 @@ class _ProdukTabState extends State<ProdukTab> {
       _error = null;
     });
     try {
+      // ✅ Pakai _selectedDate
+      final start =
+          DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+      final end = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, 23, 59, 59);
+
       final results = await Future.wait([
-        OrderService.getAll(storeId: widget.storeId, limit: 200),
+        OrderService.getAll(
+          storeId: widget.storeId,
+          startDate: start,
+          endDate: end,
+          limit: 200,
+        ),
         ProductService.getAll(limit: 200),
       ]);
+
       if (mounted) {
         setState(() {
           _orders = results[0] as List<Order>;
@@ -67,32 +81,52 @@ class _ProdukTabState extends State<ProdukTab> {
 
   int get _grandTotal => _productTotals.values.fold(0, (a, b) => a + b);
 
+  // ============ BUILD ============
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSizes.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton.tonal(
-                onPressed: _load,
-                child: const Text('Coba lagi'),
-              ),
-            ],
-          ),
+    // ✅ DateFilterWidget SELALU terlihat, di luar pengecekan loading/error
+    return Column(
+      children: [
+        DateFilterWidget(
+          selectedDate: _selectedDate,
+          onDateChanged: (date) {
+            setState(() => _selectedDate = date);
+            _load();
+          },
         ),
-      );
-    }
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? _buildError()
+                  : _buildContent(),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: _load,
+              child: const Text('Coba lagi'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
     final totals = _productTotals;
     final hasData = totals.values.any((v) => v > 0);
 
@@ -115,7 +149,7 @@ class _ProdukTabState extends State<ProdukTab> {
                   ),
                   SizedBox(height: 12),
                   Text(
-                    'Belum ada pengiriman produk',
+                    'Belum ada pengiriman produk di tanggal ini',
                     style: TextStyle(
                       fontSize: 13,
                       color: Color(0xFF6B7280),

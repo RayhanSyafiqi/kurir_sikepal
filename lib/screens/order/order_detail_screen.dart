@@ -54,7 +54,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final qtyCtrl = TextEditingController(text: '${_order!.totalQuantity}');
     final formKey = GlobalKey<FormState>();
 
-    // ✅ 1. Tampilkan dialog konfirmasi jumlah yang benar-benar dikirim
     final confirmQty = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -112,7 +111,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (confirmQty != true) return;
     final actualShipped = int.parse(qtyCtrl.text);
 
-    // ✅ 2. Buka kamera setelah jumlah dikonfirmasi
     final picked = await ImagePickerHelper.pickImage(context);
     if (picked == null) return;
 
@@ -132,7 +130,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
-      // ✅ 3. Kirim jumlah aktual & bukti foto ke API
       await OrderService.updateDelivery(
         _order!.id,
         shippedQuantity: actualShipped,
@@ -147,6 +144,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // ============ PEMBAYARAN ============
   Future<void> _choosePaymentMethod() async {
     final method = await showModalBottomSheet<String>(
       context: context,
@@ -786,7 +784,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 3. COMPLETED & BELUM BAYAR
+    // 3. COMPLETED & BELUM BAYAR -> ✅ LIHAT INVOICE / BAYAR NANTI / BAYAR SEKARANG
     if (o.status == 'COMPLETED' && !o.isPaid) {
       return Container(
         decoration: BoxDecoration(
@@ -803,11 +801,55 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.all(AppSizes.md),
-            child: _actionButton(
-              icon: Icons.account_balance_wallet,
-              label: 'Bayar',
-              color: const Color(0xFF2E7D32),
-              onTap: _saving ? null : _choosePaymentMethod,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Baris 1: Lihat Invoice (full width, outlined)
+                _actionButton(
+                  icon: Icons.receipt_long,
+                  label: 'Lihat Invoice',
+                  color: const Color(0xFF1976D2),
+                  onTap: _saving ? null : _printInvoice,
+                  outlined: true,
+                ),
+                const SizedBox(height: AppSizes.sm),
+                // Baris 2: Bayar Nanti + Bayar Sekarang
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _saving ? null : () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF6B7280),
+                          side: BorderSide(color: Colors.grey.shade400),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppSizes.radiusMd),
+                          ),
+                        ),
+                        child: const Text(
+                          'Bayar Nanti',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSizes.sm),
+                    Expanded(
+                      child: _actionButton(
+                        icon: Icons.account_balance_wallet,
+                        label: 'Bayar Sekarang',
+                        color: const Color(0xFF2E7D32),
+                        onTap: _saving ? null : _choosePaymentMethod,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -866,6 +908,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
           side: BorderSide(color: color.withOpacity(0.4)),
+          minimumSize: const Size.fromHeight(40),
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -886,6 +929,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       style: FilledButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,
+        minimumSize: const Size.fromHeight(40),
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),

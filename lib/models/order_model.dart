@@ -5,6 +5,8 @@ class Order {
   final DateTime date;
   final String status;
   final String courierId;
+  final String name;
+  final String? courierName;
   final int totalQuantity;
   final int shippedQuantity;
   final double price;
@@ -25,6 +27,8 @@ class Order {
     required this.date,
     required this.status,
     required this.courierId,
+    required this.name,
+    this.courierName,
     required this.totalQuantity,
     required this.shippedQuantity,
     required this.price,
@@ -47,6 +51,10 @@ class Order {
       date: _date(json['date']),
       status: _str(json['status'], 'DELIVERED'),
       courierId: _str(json['courierId']),
+      name: _str(json['name']),
+      courierName: json['courierName'] == null
+          ? null
+          : _str(json['courierName']), // ✅ BARU
       totalQuantity: _int(json['totalQuantity']),
       shippedQuantity: _int(json['shippedQuantity']),
       price: _double(json['price']),

@@ -11,6 +11,7 @@ import '../../services/order_service.dart';
 import '../../services/product_service.dart';
 import '../../services/store_service.dart';
 import '../../widgets/app_bottom_nav.dart';
+import '../../widgets/date_filter_widget.dart';
 import '../../widgets/extra_order_summary_card.dart';
 import '../extra_order/extra_order_detail_screen.dart';
 import '../menu/menu_screen.dart';
@@ -31,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   String? _error;
   User? _user;
+  DateTime _selectedDate = DateTime.now();
   List<Order> _todayOrders = [];
   List<ExtraOrder> _todayExtraOrders = [];
   List<Product> _products = [];
@@ -48,9 +50,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     try {
-      final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      // ✅ FIX TIMEZONE: Gunakan DateTime.utc agar server Next.js
+      // mendapatkan format ISO yang benar (dengan 'Z') sehingga
+      // perhitungan WIB di backend tidak meleset 1 hari.
+      final startOfDay = DateTime.utc(
+          _selectedDate.year, _selectedDate.month, _selectedDate.day);
+      final endOfDay = DateTime.utc(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, 23, 59, 59);
 
       final results = await Future.wait([
         AuthService.me(),
@@ -60,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
           limit: 200,
         ),
         ProductService.getAll(limit: 200),
-        StoreService.getAll(limit: 500),
+        StoreService.getAll(limit: 500, date: _selectedDate),
         ExtraOrderService.getAll(
           startDate: startOfDay,
           endDate: endOfDay,
@@ -83,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Cari order hari ini untuk toko tertentu
   Order? _findTodayOrderForStore(String storeId) {
     for (final order in _todayOrders) {
       if (order.store?.id == storeId) return order;
@@ -111,7 +116,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) _load();
   }
 
-  // ============ FAB: PILIH JENIS ORDER ============
   Future<void> _onFabPressed() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -248,7 +252,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ SUMMARY CALCULATIONS ============
   Map<String, int> get _productSummary {
     final map = <String, int>{};
     for (final p in _products) {
@@ -274,7 +277,6 @@ class _HomeScreenState extends State<HomeScreen> {
       .where((o) => !o.isPaid)
       .fold(0.0, (s, o) => s + o.totalAmount);
 
-  // ============ BUILD ============
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -283,7 +285,6 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: _load,
         child: CustomScrollView(
           slivers: [
-            // ============ HEADER KUNING ============
             SliverToBoxAdapter(
               child: HomeSummaryCard(
                 user: _user,
@@ -294,8 +295,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 totalPiutang: _totalPiutang,
               ),
             ),
-
-            // ============ TITLE: DAFTAR TOKO ============
+            SliverToBoxAdapter(
+              child: DateFilterWidget(
+                selectedDate: _selectedDate,
+                onDateChanged: (date) {
+                  setState(() => _selectedDate = date);
+                  _load();
+                },
+              ),
+            ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -317,6 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                    // ✅ Kembali pakai _stores.length karena kita menampilkan semua toko
                     if (_stores.isNotEmpty)
                       Text(
                         '${_stores.length} toko',
@@ -330,11 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
-            // ============ LIST TOKO ============
             _buildBody(),
-
-            // ============ SECTION EXTRA ORDER ============
             if (_todayExtraOrders.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: Padding(
@@ -354,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 6),
                       const Expanded(
                         child: Text(
-                          'EXTRA ORDER HARI INI',
+                          'EXTRA ORDER',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
@@ -393,13 +398,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
-
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
       ),
-
-      // ============ FAB ============
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _onFabPressed,
         backgroundColor: const Color(0xFFFF7043),
@@ -411,8 +413,6 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-
-      // ============ BOTTOM NAV ============
       bottomNavigationBar: AppBottomNav(
         userName: _user?.firstName ?? '',
         currentIndex: 0,
@@ -433,14 +433,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
-    // Loading
     if (_loading) {
       return const SliverFillRemaining(
         child: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // Error
     if (_error != null) {
       return SliverFillRemaining(
         child: Center(
@@ -464,7 +462,8 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Kosong
+    // ✅ Kembali cek _stores (semua toko rute) agar toko yang belum dibuatkan
+    // order tetap muncul dan bisa di-klik untuk buat order.
     if (_stores.isEmpty) {
       return const SliverFillRemaining(
         child: Center(
@@ -496,7 +495,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // List toko
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg),
       sliver: SliverList.separated(
@@ -504,6 +502,7 @@ class _HomeScreenState extends State<HomeScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: AppSizes.md),
         itemBuilder: (_, i) {
           final store = _stores[i];
+          // Cari apakah toko ini sudah ada order di tanggal terpilih
           final todayOrder = _findTodayOrderForStore(store.id);
           return StoreSummaryCard(
             store: store,
