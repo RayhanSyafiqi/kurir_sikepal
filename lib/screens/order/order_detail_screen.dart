@@ -10,6 +10,7 @@ import '../../core/utils/image_stamp.dart';
 import '../../core/utils/invoice_generator.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
+import '../../services/retur_service.dart'; // ✅ Pastikan import ini ada
 import '../../widgets/status_badge.dart';
 import '../../widgets/yellow_header.dart';
 import '../../core/utils/image_picker_helper.dart';
@@ -51,42 +52,79 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
-    final qtyCtrl = TextEditingController(text: '${_order!.totalQuantity}');
+    // Gunakan Map untuk menyimpan kuantitas sementara per produk
+    Map<String, int> tempItemsQty = {
+      for (var item in _order!.items) item.id: item.quantity
+    };
     final formKey = GlobalKey<FormState>();
 
-    final confirmQty = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
-        title: const Text('Konfirmasi Jumlah Kirim'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Apakah semua produk berhasil dikirim? Jika ada barang yang tidak diterima toko, silakan ubah jumlah di bawah ini.',
-                style: TextStyle(fontSize: 13),
+        title: const Text('Konfirmasi Pengiriman'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Form(
+            key: formKey,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.6,
               ),
-              const SizedBox(height: AppSizes.md),
-              TextFormField(
-                controller: qtyCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Jumlah Terkirim (pcs)',
-                  border: OutlineInputBorder(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Ubah jumlah jika ada barang yang tidak diterima. Perubahan ini akan meminta persetujuan Admin sebelum pembayaran.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: AppSizes.md),
+                    // Tampilkan List Produk untuk diedit
+                    ..._order!.items.map((item) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.productName ?? '-',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 70,
+                              child: TextFormField(
+                                initialValue: '${item.quantity}',
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding:
+                                      EdgeInsets.symmetric(vertical: 8),
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (v) {
+                                  final n = int.tryParse(v ?? '');
+                                  if (n == null || n < 0) return 'Invalid';
+                                  return null;
+                                },
+                                onChanged: (v) {
+                                  tempItemsQty[item.id] = int.tryParse(v) ?? 0;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Angka tidak valid';
-                  if (n > _order!.totalQuantity)
-                    return 'Maksimal ${_order!.totalQuantity}';
-                  return null;
-                },
               ),
-            ],
+            ),
           ),
         ),
         actions: [
@@ -108,8 +146,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       ),
     );
 
-    if (confirmQty != true) return;
-    final actualShipped = int.parse(qtyCtrl.text);
+    if (confirm != true) return;
+
+    // Hitung ulang total quantity berdasarkan editan kurir
+    final actualShipped = tempItemsQty.values.fold(0, (a, b) => a + b);
 
     final picked = await ImagePickerHelper.pickImage(context);
     if (picked == null) return;
@@ -130,18 +170,208 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
+      // Susun list items untuk dikirim ke API
+      final updatedItems = _order!.items.map((item) {
+        return {
+          "id": item.id,
+          "quantity": tempItemsQty[item.id] ?? item.quantity
+        };
+      }).toList();
+
       await OrderService.updateDelivery(
         _order!.id,
         shippedQuantity: actualShipped,
         deliveryProof: b64,
+        items: updatedItems, // Kirim editan kuantitas ke API
       );
       await _load();
-      _snack('Pengiriman selesai!');
+      _snack('Pengiriman dikirim. Menunggu persetujuan Admin.');
     } catch (e) {
       _snack('Gagal: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  // ============ RETUR SEBELUM BAYAR ============
+  Future<void> _askReturBeforePayment(Order order) async {
+    // ✅ Gunakan shippedQuantity (jumlah riil yang dikirim) sebagai batas maksimal
+    int maxRetur =
+        order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
+    int selectedQty = 0;
+    bool isProcessing = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              padding: EdgeInsets.only(
+                top: 24,
+                left: 24,
+                right: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Ada Barang Retur?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tentukan jumlah produk yang diretur sebelum melakukan pembayaran. Lewati jika tidak ada.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Quantity Selector
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: selectedQty > 0 && !isProcessing
+                            ? () => setModalState(() => selectedQty--)
+                            : null,
+                        icon: const Icon(Icons.remove_circle_outline),
+                        iconSize: 36,
+                        color: const Color(0xFFD32F2F),
+                      ),
+                      SizedBox(
+                        width: 80,
+                        child: Text(
+                          '$selectedQty',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        // Batasi dengan maxRetur
+                        onPressed: selectedQty < maxRetur && !isProcessing
+                            ? () => setModalState(() => selectedQty++)
+                            : null,
+                        icon: const Icon(Icons.add_circle_outline),
+                        iconSize: 36,
+                        color: const Color(0xFF2E7D32),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Total dikirim: $maxRetur pcs',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isProcessing
+                              ? null
+                              : () {
+                                  Navigator.pop(ctx);
+                                  _choosePaymentMethod(); // Lanjut ke pilih metode bayar
+                                },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Tidak Ada Retur',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: isProcessing
+                              ? null
+                              : () async {
+                                  if (selectedQty == 0) {
+                                    Navigator.pop(ctx);
+                                    _choosePaymentMethod();
+                                    return;
+                                  }
+                                  setModalState(() => isProcessing = true);
+                                  try {
+                                    await ReturService.process(
+                                      orderId: order.id,
+                                      qty: selectedQty,
+                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    _snack('Retur $selectedQty pcs diproses');
+                                    _choosePaymentMethod(); // Lanjut bayar
+                                  } catch (e) {
+                                    if (ctx.mounted)
+                                      setModalState(() => isProcessing = false);
+                                    _snack('Gagal retur: $e');
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7043),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Simpan & Lanjut',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   // ============ PEMBAYARAN ============
@@ -743,7 +973,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget _buildActions() {
     final o = _order!;
 
-    // 1. DRAFT
+    // 1. DRAFT (Menunggu persetujuan Admin)
     if (o.status == 'DRAFT') {
       return Container(
         padding: const EdgeInsets.all(AppSizes.lg),
@@ -784,7 +1014,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 3. COMPLETED & BELUM BAYAR -> ✅ LIHAT INVOICE / BAYAR NANTI / BAYAR SEKARANG
+    // 3. COMPLETED & BELUM BAYAR -> TOMBOL BAYAR (Langsung ke Pop-up Retur)
     if (o.status == 'COMPLETED' && !o.isPaid) {
       return Container(
         decoration: BoxDecoration(
@@ -844,7 +1074,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         icon: Icons.account_balance_wallet,
                         label: 'Bayar Sekarang',
                         color: const Color(0xFF2E7D32),
-                        onTap: _saving ? null : _choosePaymentMethod,
+                        // ✅ Panggil _askReturBeforePayment
+                        onTap: _saving ? null : () => _askReturBeforePayment(o),
                       ),
                     ),
                   ],

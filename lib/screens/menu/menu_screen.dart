@@ -5,7 +5,6 @@ import '../../services/auth_service.dart';
 import '../../widgets/app_bottom_nav.dart';
 import '../../widgets/yellow_header.dart';
 import '../../routes/app_routes.dart';
-import '../returns/returns_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -215,15 +214,7 @@ class _MenuScreenState extends State<MenuScreen> {
           MaterialPageRoute(builder: (_) => const TransactionsScreen()),
         ),
       ),
-      _MenuItem(
-        icon: Icons.assignment_return_rounded,
-        label: 'Retur',
-        color: const Color(0xFFD32F2F),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ReturnsScreen()),
-        ),
-      ),
+      // ✅ Menu Retur sudah dihapus dari sini karena dipindah ke dalam tab Transaksi
       _MenuItem(
         icon: Icons.store_rounded,
         label: 'Daftar Toko',

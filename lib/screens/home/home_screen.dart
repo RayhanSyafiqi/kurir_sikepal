@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   User? _user;
   DateTime _selectedDate = DateTime.now();
   List<Order> _todayOrders = [];
+  List<Order> _yesterdayOrders = []; // ✅ Untuk Tagihan (Kemarin)
   List<ExtraOrder> _todayExtraOrders = [];
   List<Product> _products = [];
   List<Store> _stores = [];
@@ -50,13 +51,17 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     try {
-      // ✅ FIX TIMEZONE: Gunakan DateTime.utc agar server Next.js
-      // mendapatkan format ISO yang benar (dengan 'Z') sehingga
-      // perhitungan WIB di backend tidak meleset 1 hari.
       final startOfDay = DateTime.utc(
           _selectedDate.year, _selectedDate.month, _selectedDate.day);
       final endOfDay = DateTime.utc(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, 23, 59, 59);
+
+      // ✅ Hitung tanggal kemarin untuk Tagihan
+      final yesterday = _selectedDate.subtract(const Duration(days: 1));
+      final startYesterday =
+          DateTime.utc(yesterday.year, yesterday.month, yesterday.day);
+      final endYesterday = DateTime.utc(
+          yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
 
       final results = await Future.wait([
         AuthService.me(),
@@ -71,6 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
           startDate: startOfDay,
           endDate: endOfDay,
         ),
+        // ✅ Fetch data kemarin untuk Tagihan
+        OrderService.getAll(
+          startDate: startYesterday,
+          endDate: endYesterday,
+          limit: 200,
+        ),
       ]);
 
       if (mounted) {
@@ -80,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _products = results[2] as List<Product>;
           _stores = results[3] as List<Store>;
           _todayExtraOrders = results[4] as List<ExtraOrder>;
+          _yesterdayOrders = results[5] as List<Order>; // ✅ Set data kemarin
         });
       }
     } catch (e) {
@@ -267,15 +279,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int get _totalQty => _productSummary.values.fold(0, (a, b) => a + b);
-
   int get _totalRemaining => _todayOrders.fold(0, (s, o) => s + o.remaining);
-
   double get _totalAmount =>
       _todayOrders.fold(0.0, (s, o) => s + o.totalAmount);
-
   double get _totalPiutang => _todayOrders
       .where((o) => !o.isPaid)
       .fold(0.0, (s, o) => s + o.totalAmount);
+
+  // ✅ KPI TAGIHAN (Berdasarkan data kemarin)
+  int get _totalStoresYesterday => _yesterdayOrders.length;
+  int get _paidStoresYesterday =>
+      _yesterdayOrders.where((o) => o.isPaid).length;
+
+  // ✅ KPI LAINNYA (Berdasarkan data hari ini)
+  int get _totalShippedProducts =>
+      _todayOrders.fold(0, (s, o) => s + o.shippedQuantity);
+  int get _deliveredStores => _todayOrders
+      .where((o) => o.status == 'COMPLETED' || o.status == 'DELIVERED')
+      .length;
 
   @override
   Widget build(BuildContext context) {
@@ -293,6 +314,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 totalRemaining: _totalRemaining,
                 totalAmount: _totalAmount,
                 totalPiutang: _totalPiutang,
+
+                // ✅ Tagihan (Data Kemarin)
+                totalStoresYesterday: _totalStoresYesterday,
+                paidStores: _paidStoresYesterday,
+
+                // ✅ Produk (Data Hari Ini)
+                totalShippedProducts: _totalShippedProducts,
+
+                // ✅ Lokasi (Data Hari Ini - 5 Toko)
+                totalStoresToday: _stores.length,
+                deliveredStores: _deliveredStores,
               ),
             ),
             SliverToBoxAdapter(
@@ -325,7 +357,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    // ✅ Kembali pakai _stores.length karena kita menampilkan semua toko
                     if (_stores.isNotEmpty)
                       Text(
                         '${_stores.length} toko',
@@ -462,8 +493,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // ✅ Kembali cek _stores (semua toko rute) agar toko yang belum dibuatkan
-    // order tetap muncul dan bisa di-klik untuk buat order.
     if (_stores.isEmpty) {
       return const SliverFillRemaining(
         child: Center(
@@ -502,7 +531,6 @@ class _HomeScreenState extends State<HomeScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: AppSizes.md),
         itemBuilder: (_, i) {
           final store = _stores[i];
-          // Cari apakah toko ini sudah ada order di tanggal terpilih
           final todayOrder = _findTodayOrderForStore(store.id);
           return StoreSummaryCard(
             store: store,

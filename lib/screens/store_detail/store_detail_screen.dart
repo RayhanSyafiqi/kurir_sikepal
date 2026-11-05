@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-// import '../../core/constants/app_sizes.dart';
 import '../../models/store_model.dart';
 import '../../widgets/yellow_header.dart';
 import 'tabs/today_tab.dart';
 import 'tabs/transaksi_tab.dart';
 import 'tabs/produk_tab.dart';
+import 'tabs/retur_tab.dart'; // ✅ Import ReturTab
 
 class StoreDetailScreen extends StatefulWidget {
   final Store store;
@@ -21,7 +21,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    // ✅ Ubah length menjadi 4 karena ada tab baru
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -45,6 +46,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
             color: const Color(0xFFFFB300),
             child: TabBar(
               controller: _tab,
+              // ✅ Gunakan isScrollable jika layar HP terlalu sempit untuk 4 tab
+              isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
@@ -58,6 +61,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
                 Tab(text: 'HARI INI'),
                 Tab(text: 'TRANSAKSI'),
                 Tab(text: 'PRODUK'),
+                Tab(text: 'RETUR'), // ✅ Tab Baru
               ],
             ),
           ),
@@ -68,6 +72,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
                 TodayTab(storeId: widget.store.id),
                 TransaksiTab(storeId: widget.store.id),
                 ProdukTab(storeId: widget.store.id),
+                ReturTab(storeId: widget.store.id), // ✅ Panggil ReturTab
               ],
             ),
           ),

@@ -9,7 +9,8 @@ import '../../../core/utils/image_stamp.dart';
 import '../../../core/utils/invoice_generator.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
-import '../../../widgets/date_filter_widget.dart'; // ✅ TAMBAH INI
+import '../../../services/retur_service.dart';
+import '../../../widgets/date_filter_widget.dart';
 import '../../order/order_detail_screen.dart';
 
 class TransaksiTab extends StatefulWidget {
@@ -46,7 +47,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
           DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
       final end = DateTime(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, 23, 59, 59);
-      // ✅ startDate & endDate sekarang BENAR-BENAR dipakai
       final list = await OrderService.getAll(
         storeId: widget.storeId,
         startDate: start,
@@ -116,6 +116,186 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
   void _clearSelection() {
     setState(() => _selectedIds.clear());
+  }
+
+  // ✅ FITUR RETUR SEBELUM PEMBAYARAN (Bottom Sheet)
+  Future<void> _askReturBeforePayment(Order order) async {
+    int maxRetur =
+        order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
+    int selectedQty = 0;
+    bool isProcessing = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              padding: EdgeInsets.only(
+                top: 24,
+                left: 24,
+                right: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Ada Barang Retur?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tentukan jumlah produk yang diretur sebelum melakukan pembayaran. Lewati jika tidak ada.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Quantity Selector
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: selectedQty > 0 && !isProcessing
+                            ? () => setModalState(() => selectedQty--)
+                            : null,
+                        icon: const Icon(Icons.remove_circle_outline),
+                        iconSize: 36,
+                        color: const Color(0xFFD32F2F),
+                      ),
+                      SizedBox(
+                        width: 80,
+                        child: Text(
+                          '$selectedQty',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: selectedQty < maxRetur && !isProcessing
+                            ? () => setModalState(() => selectedQty++)
+                            : null,
+                        icon: const Icon(Icons.add_circle_outline),
+                        iconSize: 36,
+                        color: const Color(0xFF2E7D32),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Total dikirim: $maxRetur pcs',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isProcessing
+                              ? null
+                              : () {
+                                  Navigator.pop(ctx);
+                                  _toggleSelect(order.id);
+                                },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Tidak Ada Retur',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: isProcessing
+                              ? null
+                              : () async {
+                                  if (selectedQty == 0) {
+                                    Navigator.pop(ctx);
+                                    _toggleSelect(order.id);
+                                    return;
+                                  }
+                                  setModalState(() => isProcessing = true);
+                                  try {
+                                    await ReturService.process(
+                                      orderId: order.id,
+                                      qty: selectedQty,
+                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    _snack('Retur $selectedQty pcs diproses');
+                                    _toggleSelect(order.id);
+                                    _load();
+                                  } catch (e) {
+                                    if (ctx.mounted)
+                                      setModalState(() => isProcessing = false);
+                                    _snack('Gagal retur: $e');
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7043),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Simpan & Lanjut',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _processBulkPayment() async {
@@ -388,33 +568,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSizes.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton.tonal(
-                onPressed: _load,
-                child: const Text('Coba lagi'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final list = _filtered;
-
-    // ✅ Struktur baru: DateFilterWidget di atas, sisanya di Expanded
     return Column(
       children: [
         DateFilterWidget(
@@ -425,41 +578,68 @@ class _TransaksiTabState extends State<TransaksiTab> {
           },
         ),
         Expanded(
-          child: Stack(
-            children: [
-              RefreshIndicator(
-                onRefresh: _load,
-                child: ListView(
-                  padding: EdgeInsets.only(
-                    left: AppSizes.lg,
-                    right: AppSizes.lg,
-                    top: AppSizes.lg,
-                    bottom: _selectedCount > 0 ? 120 : AppSizes.lg,
-                  ),
-                  children: [
-                    _summaryRow(),
-                    const SizedBox(height: AppSizes.md),
-                    _filterChips(),
-                    const SizedBox(height: AppSizes.md),
-                    if (_filter != 'PAID' && list.any((o) => !o.isPaid))
-                      _selectAllButton(list),
-                    if (list.isEmpty)
-                      _emptyFiltered()
-                    else
-                      ...list.map(
-                        (o) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSizes.sm + 2),
-                          child: _txCard(o),
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSizes.xl),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off,
+                                size: 64, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            Text(_error!, textAlign: TextAlign.center),
+                            const SizedBox(height: 12),
+                            FilledButton.tonal(
+                              onPressed: _load,
+                              child: const Text('Coba lagi'),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
+                    )
+                  : _buildContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent() {
+    final list = _filtered;
+
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: EdgeInsets.only(
+              left: AppSizes.lg,
+              right: AppSizes.lg,
+              top: AppSizes.lg,
+              bottom: _selectedCount > 0 ? 120 : AppSizes.lg,
+            ),
+            children: [
+              _summaryRow(),
+              const SizedBox(height: AppSizes.md),
+              _filterChips(),
+              const SizedBox(height: AppSizes.md),
+              if (_filter != 'PAID' && list.any((o) => !o.isPaid))
+                _selectAllButton(list),
+              if (list.isEmpty)
+                _emptyFiltered()
+              else
+                ...list.map(
+                  (o) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSizes.sm + 2),
+                    child: _txCard(o),
+                  ),
                 ),
-              ),
-              if (_selectedCount > 0) _bulkBottomBar(),
             ],
           ),
         ),
+        if (_selectedCount > 0) _bulkBottomBar(),
       ],
     );
   }
@@ -653,12 +833,16 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final isSelected = _selectedIds.contains(o.id);
     final canSelect = !o.isPaid;
 
+    // ✅ Gunakan shippedQuantity jika ada, jika 0 baru pakai totalQuantity
+    final displayQty =
+        o.shippedQuantity > 0 ? o.shippedQuantity : o.totalQuantity;
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       child: InkWell(
         onTap: canSelect
-            ? () => _toggleSelect(o.id)
+            ? () => _askReturBeforePayment(o)
             : () async {
                 await Navigator.push(
                   context,
@@ -735,7 +919,8 @@ class _TransaksiTabState extends State<TransaksiTab> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${o.totalQuantity} pcs · ${Formatters.orderStatus(o.status)}',
+                        // ✅ Gunakan displayQty
+                        '$displayQty pcs · ${Formatters.orderStatus(o.status)}',
                         style: const TextStyle(
                           fontSize: 11,
                           color: Color(0xFF6B7280),

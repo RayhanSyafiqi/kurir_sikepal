@@ -94,6 +94,7 @@ class OrderService {
     String? note,
     String? status,
     String? deliveryProof,
+    List<Map<String, dynamic>>? items, // ✅ TAMBAHAN PARAMETER ITEMS
   }) async {
     final res = await ApiClient.patch(
       '${ApiConfig.orderDetail(id)}/delivery',
@@ -103,6 +104,7 @@ class OrderService {
         if (note != null) 'note': note,
         if (status != null) 'status': status,
         if (deliveryProof != null) 'deliveryProof': deliveryProof,
+        if (items != null) 'items': items, // ✅ KIRIM ITEMS KE BACKEND
       },
     );
     final map = _asMap(res['data'], context: 'update delivery');

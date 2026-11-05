@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../models/user_model.dart';
-import '../../attendance/attendance_sheet.dart'; // ✅ Import AttendanceSheet
+import '../../attendance/attendance_sheet.dart';
 
 class HomeSummaryCard extends StatelessWidget {
   final User? user;
@@ -11,6 +11,13 @@ class HomeSummaryCard extends StatelessWidget {
   final double totalAmount;
   final double totalPiutang;
 
+  // ✅ KPI Baru
+  final int totalStoresYesterday; // Khusus Tagihan (Kemarin)
+  final int paidStores; // Khusus Tagihan (Kemarin)
+  final int totalShippedProducts; // Khusus Produk (Hari ini)
+  final int totalStoresToday; // Khusus Lokasi (Hari ini)
+  final int deliveredStores; // Khusus Lokasi (Hari ini)
+
   const HomeSummaryCard({
     super.key,
     required this.user,
@@ -19,6 +26,11 @@ class HomeSummaryCard extends StatelessWidget {
     required this.totalRemaining,
     required this.totalAmount,
     required this.totalPiutang,
+    required this.totalStoresYesterday,
+    required this.paidStores,
+    required this.totalShippedProducts,
+    required this.totalStoresToday,
+    required this.deliveredStores,
   });
 
   @override
@@ -56,7 +68,6 @@ class HomeSummaryCard extends StatelessWidget {
                       label: 'ABSENSI\nMASUK',
                       color: const Color(0xFF1B5E20),
                       onTap: () async {
-                        // ✅ Panggil Bottom Sheet Absensi
                         final success = await AttendanceSheet.show(context);
                         if (success == true) {
                           _toast(context, 'Absensi berhasil terkirim!');
@@ -80,6 +91,45 @@ class HomeSummaryCard extends StatelessWidget {
                       label: 'KAS KURIR\nMODUL',
                       color: const Color(0xFF1A237E),
                       onTap: () => _toast(context, 'Kas kurir'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSizes.md),
+
+              // ============ ✅ KPI KURIR BARU ============
+              Row(
+                children: [
+                  Expanded(
+                    child: _kpiCard(
+                      title: 'TAGIHAN',
+                      current: paidStores,
+                      total: totalStoresYesterday, // ✅ Pakai data kemarin
+                      icon: Icons.receipt_long_rounded,
+                      color: const Color(0xFF2E7D32),
+                      suffix: 'Toko',
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.sm),
+                  Expanded(
+                    child: _kpiCard(
+                      title: 'PRODUK',
+                      current: totalShippedProducts,
+                      total: totalQty,
+                      icon: Icons.inventory_2_rounded,
+                      color: const Color(0xFF1976D2),
+                      suffix: 'Pcs',
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.sm),
+                  Expanded(
+                    child: _kpiCard(
+                      title: 'LOKASI',
+                      current: deliveredStores,
+                      total: totalStoresToday, // ✅ Pakai data hari ini
+                      icon: Icons.location_on_rounded,
+                      color: const Color(0xFFE65100),
+                      suffix: 'Toko',
                     ),
                   ),
                 ],
@@ -235,7 +285,69 @@ class HomeSummaryCard extends StatelessWidget {
     );
   }
 
-  // ============ WIDGETS ============
+  // ============ WIDGET KPI BARU ============
+  Widget _kpiCard({
+    required String title,
+    required int current,
+    required int total,
+    required IconData icon,
+    required Color color,
+    required String suffix,
+  }) {
+    final percentage = total == 0 ? 0.0 : (current / total).clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: color.withOpacity(0.8)),
+          ),
+          const SizedBox(height: 4),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                    text: '$current',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: color)),
+                TextSpan(
+                    text: ' / $total $suffix',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6B7280))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percentage,
+              minHeight: 6,
+              backgroundColor: color.withOpacity(0.1),
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============ WIDGETS BAWAAN ANDA ============
   Widget _productGrid() {
     final entries = productSummary.entries.toList();
     return SingleChildScrollView(
