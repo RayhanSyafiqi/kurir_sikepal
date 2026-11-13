@@ -6,13 +6,19 @@ import '../../../models/store_model.dart';
 
 class StoreSummaryCard extends StatelessWidget {
   final Store store;
-  final Order? todayOrder; // ← order hari ini (bisa null)
+  final Order? todayOrder;
+  final int totalNota; // ✅ Tambahan: Jumlah Nota
+  final double totalPiutang; // Total Uang
+  final bool isWarning;
   final VoidCallback? onTap;
 
   const StoreSummaryCard({
     super.key,
     required this.store,
     this.todayOrder,
+    this.totalNota = 0,
+    this.totalPiutang = 0,
+    this.isWarning = false,
     this.onTap,
   });
 
@@ -21,27 +27,47 @@ class StoreSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: isWarning ? const Color(0xFFFEF2F2) : Colors.white,
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       child: InkWell(
-        onTap: onTap,
+        onTap: isWarning
+            ? () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Toko tidak dapat dikirim, karena melebihi batas tenggat pembayaran'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            : onTap,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+            border: Border.all(
+              color: isWarning ? Colors.red.shade300 : Colors.transparent,
+              width: isWarning ? 1.5 : 1,
+            ),
+          ),
           padding: const EdgeInsets.all(AppSizes.md + 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ============ HEADER ============
+              // ============ 1. HEADER (Nama Toko & Status) ============
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       (store.name ?? 'Tanpa Nama').toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF111827),
+                        color: isWarning
+                            ? Colors.red.shade900
+                            : const Color(0xFF111827),
                         height: 1.2,
                       ),
                       maxLines: 2,
@@ -52,58 +78,96 @@ class StoreSummaryCard extends StatelessWidget {
                   _deliveryStatusBadge(),
                 ],
               ),
-              const SizedBox(height: 8),
 
-              // ============ GRADE + KATEGORI ============
+              // ============ 2. TOTAL NOTA PIUTANG (Di Bawah Status) ============
+              if (totalNota > 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color:
+                        isWarning ? Colors.red.shade50 : Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isWarning
+                          ? Colors.red.shade200
+                          : Colors.orange.shade200,
+                    ),
+                  ),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    children: [
+                      Icon(
+                        Icons.receipt_long_rounded,
+                        size: 14,
+                        color: isWarning ? Colors.red : Colors.orange.shade800,
+                      ),
+                      Text(
+                        'Nota Tagihan: $totalNota', // ✅ Tampilkan Jumlah Nota
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: isWarning
+                              ? Colors.red.shade700
+                              : Colors.orange.shade900,
+                        ),
+                      ),
+                      Text(
+                        '(${Formatters.currency(totalPiutang)})', // ✅ Tampilkan Total Uang dalam kurung
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isWarning
+                              ? Colors.red.shade500
+                              : Colors.orange.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+
+              // ============ 3. GRADE + KATEGORI ============
               Row(
                 children: [
                   if (store.grade != null)
-                    _badge(
-                      'Grade ${store.grade}',
-                      const Color(0xFF1976D2),
-                    ),
+                    _badge('Grade ${store.grade}', const Color(0xFF1976D2)),
                   if (store.grade != null && store.category != null)
                     const SizedBox(width: 6),
                   if (store.category != null)
-                    _badge(
-                      Formatters.category(store.category),
-                      const Color(0xFFF57C00),
-                    ),
+                    _badge(Formatters.category(store.category),
+                        const Color(0xFFF57C00)),
                 ],
               ),
               const SizedBox(height: 10),
 
-              // ============ PIC ============
+              // ============ 4. PIC ============
               if (store.picName != null && store.picName!.isNotEmpty)
-                _infoRow(
-                  Icons.person_outline,
-                  store.picName!,
-                  store.picPhone,
-                ),
+                _infoRow(Icons.person_outline, store.picName!, store.picPhone),
 
-              // ============ ALAMAT ============
+              // ============ 5. ALAMAT ============
               if (store.address != null && store.address!.isNotEmpty)
                 _infoRow(
-                  Icons.location_on_outlined,
-                  store.address!,
-                  store.city,
-                ),
+                    Icons.location_on_outlined, store.address!, store.city),
 
-              // ============ HARGA PRODUK TOKO INI ============
+              // ============ 6. HARGA PRODUK TOKO INI ============
               _infoRow(
                 Icons.local_offer_outlined,
                 'Harga: ${Formatters.price(store.price)}/pcs',
                 Formatters.paymentMethod(store.paymentMethod),
               ),
 
-              // ============ PRODUK DIKIRIM HARI INI ============
+              // ============ 7. PRODUK DIKIRIM HARI INI ============
               const SizedBox(height: 4),
               Divider(color: Colors.grey.shade200, height: 1),
               const SizedBox(height: 10),
 
               if (_hasOrderToday) _produkSection() else _emptyProdukSection(),
 
-              // ============ FOOTER ============
+              // ============ 8. FOOTER ============
               const SizedBox(height: 10),
               Divider(color: Colors.grey.shade200, height: 1),
               const SizedBox(height: 8),
@@ -114,23 +178,25 @@ class StoreSummaryCard extends StatelessWidget {
                         ? Icons.local_shipping_rounded
                         : Icons.alt_route_rounded,
                     size: 14,
-                    color: const Color(0xFFF57C00),
+                    color: isWarning ? Colors.red : const Color(0xFFF57C00),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     _hasOrderToday
                         ? 'Lihat Pengiriman Hari Ini'
-                        : 'Lihat Detail Toko',
-                    style: const TextStyle(
+                        : 'Buat Orderan Baru',
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFFF57C00),
+                      color: isWarning ? Colors.red : const Color(0xFFF57C00),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const Spacer(),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    color: Color(0xFF9CA3AF),
+                    color: isWarning
+                        ? Colors.red.shade300
+                        : const Color(0xFF9CA3AF),
                   ),
                 ],
               ),
@@ -149,21 +215,20 @@ class StoreSummaryCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header produk
         Row(
           children: [
-            const Icon(
+            Icon(
               Icons.inventory_2_outlined,
               size: 14,
-              color: Color(0xFFF57C00),
+              color: isWarning ? Colors.red : const Color(0xFFF57C00),
             ),
             const SizedBox(width: 6),
-            const Text(
+            Text(
               'PRODUK DIKIRIM',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFFF57C00),
+                color: isWarning ? Colors.red : const Color(0xFFF57C00),
                 letterSpacing: 0.5,
               ),
             ),
@@ -171,23 +236,21 @@ class StoreSummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0),
+                color: isWarning ? Colors.red.shade50 : const Color(0xFFFFF3E0),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${order.totalQuantity} pcs',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFFE65100),
+                  color: isWarning ? Colors.red : const Color(0xFFE65100),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-
-        // Chips produk
         if (items.isEmpty)
           const Text(
             'Belum ada produk',
@@ -202,38 +265,30 @@ class StoreSummaryCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: items
-                .map((item) => _productChip(
-                      item.productName ?? '-',
-                      item.quantity,
-                    ))
+                .map((item) =>
+                    _productChip(item.productName ?? '-', item.quantity))
                 .toList(),
           ),
-
-        // Total uang
         const SizedBox(height: 8),
         Row(
           children: [
-            const Icon(
-              Icons.payments_outlined,
-              size: 13,
-              color: Color(0xFF6B7280),
-            ),
+            const Icon(Icons.payments_outlined,
+                size: 13, color: Color(0xFF6B7280)),
             const SizedBox(width: 6),
             const Text(
               'Total',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF6B7280),
-              ),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280)),
             ),
             const Spacer(),
             Text(
               Formatters.currency(order.totalAmount),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF2E7D32),
+                color: isWarning ? Colors.red : const Color(0xFF2E7D32),
               ),
             ),
           ],
@@ -245,14 +300,11 @@ class StoreSummaryCard extends StatelessWidget {
   Widget _emptyProdukSection() {
     return Row(
       children: [
-        const Icon(
-          Icons.inventory_2_outlined,
-          size: 14,
-          color: Color(0xFF9CA3AF),
-        ),
+        const Icon(Icons.inventory_2_outlined,
+            size: 14, color: Color(0xFF9CA3AF)),
         const SizedBox(width: 6),
         Text(
-          'Belum ada produk untuk dikirim',
+          'Tidak ada orderan di tanggal ini',
           style: TextStyle(
             fontSize: 11,
             fontStyle: FontStyle.italic,
@@ -263,52 +315,26 @@ class StoreSummaryCard extends StatelessWidget {
     );
   }
 
-  // ============ STATUS BADGE (pojok kanan atas) ============
   Widget _deliveryStatusBadge() {
-    // Tidak ada order hari ini
+    if (isWarning) {
+      return _badgePill('TENGGAT LEWAT', Colors.red, Icons.error_outline);
+    }
     if (!_hasOrderToday) {
       return _badgePill(
-        'BELUM KIRIM',
-        const Color(0xFFD32F2F),
-        Icons.schedule,
-      );
+          'TIDAK ADA ORDER', const Color(0xFF9CA3AF), Icons.info_outline);
     }
 
     final status = todayOrder!.status;
-
-    // Sudah selesai
-    if (status == 'COMPLETED') {
+    if (status == 'COMPLETED')
       return _badgePill(
-        'SUDAH KIRIM',
-        const Color(0xFF2E7D32),
-        Icons.check_circle,
-      );
-    }
+          'SUDAH KIRIM', const Color(0xFF2E7D32), Icons.check_circle);
+    if (status == 'CANCELLED')
+      return _badgePill('DIBATALKAN', const Color(0xFF616161), Icons.cancel);
+    if (status == 'DRAFT')
+      return _badgePill('DRAFT', const Color(0xFF1976D2), Icons.edit_note);
 
-    // Dibatalkan
-    if (status == 'CANCELLED') {
-      return _badgePill(
-        'DIBATALKAN',
-        const Color(0xFF616161),
-        Icons.cancel,
-      );
-    }
-
-    // Masih draft
-    if (status == 'DRAFT') {
-      return _badgePill(
-        'DRAFT',
-        const Color(0xFF1976D2),
-        Icons.edit_note,
-      );
-    }
-
-    // Default: DELIVERED (perlu dikirim / sudah dikirim hari ini)
     return _badgePill(
-      'PERLU DIKIRIM',
-      const Color(0xFFF57C00),
-      Icons.local_shipping_rounded,
-    );
+        'PERLU DIKIRIM', const Color(0xFFF57C00), Icons.local_shipping_rounded);
   }
 
   Widget _badgePill(String label, Color color, IconData icon) {
@@ -338,7 +364,6 @@ class StoreSummaryCard extends StatelessWidget {
     );
   }
 
-  // ============ WIDGETS ============
   Widget _infoRow(IconData icon, String primary, String? secondary) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -460,9 +485,8 @@ class StoreSummaryCard extends StatelessWidget {
     if (n.contains('tuna') && n.contains('may')) return const Color(0xFF1976D2);
     if (n.contains('ayam') && n.contains('may')) return const Color(0xFFF57C00);
     if (n.contains('ayam') && n.contains('ped')) return const Color(0xFFD32F2F);
-    if (n.contains('menu') || n.contains('bulan')) {
+    if (n.contains('menu') || n.contains('bulan'))
       return const Color(0xFF388E3C);
-    }
     return const Color(0xFF616161);
   }
 }

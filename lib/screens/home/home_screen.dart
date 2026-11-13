@@ -92,6 +92,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ✅ 1. HITUNG JUMLAH NOTA PIUTANG PER TOKO
+  int _getStoreUnpaidCount(String storeId) {
+    return _allUnpaidOrders
+        .where((o) =>
+            o.store?.id == storeId &&
+            (o.hasDeliveryProof || o.status == 'COMPLETED'))
+        .length;
+  }
+
+  // ✅ 2. HITUNG TOTAL UANG PIUTANG PER TOKO
+  double _getStorePiutang(String storeId) {
+    return _allUnpaidOrders
+        .where((o) =>
+            o.store?.id == storeId &&
+            (o.hasDeliveryProof || o.status == 'COMPLETED'))
+        .fold(0.0, (sum, o) => sum + o.totalAmount);
+  }
+
+  // ✅ 3. CEK WARNING TENGGAT WAKTU
+  bool _isStoreWarning(String storeId, String? paymentMethod) {
+    final storeUnpaid = _allUnpaidOrders
+        .where((o) =>
+            o.store?.id == storeId &&
+            (o.hasDeliveryProof || o.status == 'COMPLETED'))
+        .toList();
+
+    if (storeUnpaid.isEmpty) return false;
+
+    final oldestOrder =
+        storeUnpaid.reduce((a, b) => a.date.isBefore(b.date) ? a : b);
+    final daysLate = DateTime.now()
+        .difference(DateTime(oldestOrder.date.year, oldestOrder.date.month,
+            oldestOrder.date.day))
+        .inDays;
+
+    final pm = paymentMethod?.toUpperCase() ?? 'DAILY';
+
+    if (pm == 'DAILY' || pm == 'HARIAN') return daysLate > 2;
+    if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') return daysLate > 8;
+    if (pm == 'MONTHLY' || pm == 'BULANAN') return daysLate > 15;
+
+    return false;
+  }
+
   Order? _findTodayOrderForStore(String storeId) {
     for (final order in _todayOrders) {
       if (order.store?.id == storeId) return order;
@@ -277,7 +321,6 @@ class _HomeScreenState extends State<HomeScreen> {
       .where((o) => !o.isPaid)
       .fold(0.0, (s, o) => s + o.totalAmount);
 
-  // ✅ KPI CALCULATIONS
   int get _paidStores => _todayOrders.where((o) => o.isPaid).length;
   int get _totalShippedProducts =>
       _todayOrders.fold(0, (s, o) => s + o.shippedQuantity);
@@ -285,7 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
       .where((o) => o.status == 'COMPLETED' || o.status == 'DELIVERED')
       .length;
 
-  // ✅ FILTER: Hanya ambil orderan yang SUDAH DIKIRIM (punya bukti/COMPLETED) tapi BELUM BAYAR
   List<Order> get _deliveredUnpaidOrders {
     return _allUnpaidOrders
         .where((o) => o.hasDeliveryProof || o.status == 'COMPLETED')
@@ -296,27 +338,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int get _warningStoresCount {
     final warningStoreIds = <String>{};
-
-    // ✅ Gunakan list yang sudah difilter
     for (final o in _deliveredUnpaidOrders) {
       final daysLate = DateTime.now()
           .difference(DateTime(o.date.year, o.date.month, o.date.day))
           .inDays;
-
       final pm = o.store?.paymentMethod?.toUpperCase() ?? 'DAILY';
 
       bool isWarning = false;
-      if (pm == 'DAILY' || pm == 'HARIAN') {
+      if (pm == 'DAILY' || pm == 'HARIAN')
         isWarning = daysLate > 2;
-      } else if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') {
+      else if (pm == 'WEEKLY' || pm == 'MINGGUAN_1')
         isWarning = daysLate > 8;
-      } else if (pm == 'MONTHLY' || pm == 'BULANAN') {
-        isWarning = daysLate > 15;
-      }
+      else if (pm == 'MONTHLY' || pm == 'BULANAN') isWarning = daysLate > 15;
 
-      if (isWarning && o.store?.id != null) {
-        warningStoreIds.add(o.store!.id);
-      }
+      if (isWarning && o.store?.id != null) warningStoreIds.add(o.store!.id);
     }
     return warningStoreIds.length;
   }
@@ -551,9 +586,17 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (_, i) {
           final store = _stores[i];
           final todayOrder = _findTodayOrderForStore(store.id);
+
+          final int totalNota = _getStoreUnpaidCount(store.id); // ✅ Hitung Nota
+          final double piutang = _getStorePiutang(store.id);
+          final bool isWarning = _isStoreWarning(store.id, store.paymentMethod);
+
           return StoreSummaryCard(
             store: store,
             todayOrder: todayOrder,
+            totalNota: totalNota, // ✅ Passing Jumlah Nota
+            totalPiutang: piutang, // ✅ Passing Total Uang
+            isWarning: isWarning,
             onTap: () => _openStoreDetail(store),
           );
         },

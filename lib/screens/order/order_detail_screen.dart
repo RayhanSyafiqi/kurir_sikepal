@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -51,9 +53,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
+    // Map untuk menyimpan kuantitas sementara per produk
     Map<String, int> tempItemsQty = {
       for (var item in _order!.items) item.id: item.quantity
     };
+    // ✅ Controller untuk Catatan Kurir
+    final noteCtrl = TextEditingController(text: _order!.note ?? '');
     final formKey = GlobalKey<FormState>();
 
     final confirm = await showDialog<bool>(
@@ -80,6 +85,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: AppSizes.md),
+                    // List Produk
                     ..._order!.items.map((item) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -118,6 +124,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       );
                     }),
+
+                    // ✅ TAMBAHAN: Input Catatan Kurir
+                    const SizedBox(height: AppSizes.md),
+                    const Text(
+                      'Catatan Kurir (Opsional)',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: noteCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'Contoh: 2 pcs rusak, 1 pcs tidak tersedia',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -147,10 +171,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     final actualShipped = tempItemsQty.values.fold(0, (a, b) => a + b);
 
-    // ✅ MUTLAK HANYA KAMERA
+    // Hanya Kamera (Kecuali di Desktop untuk testing)
+    ImageSource source = ImageSource.camera;
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      source = ImageSource.gallery;
+    }
+
     final ImagePicker picker = ImagePicker();
     final XFile? picked = await picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 70,
     );
 
@@ -184,6 +214,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         shippedQuantity: actualShipped,
         deliveryProof: b64,
         items: updatedItems,
+        note: noteCtrl.text.trim(), // ✅ Kirim catatan ke API
       );
       await _load();
       _snack('Pengiriman dikirim. Menunggu persetujuan Admin.');
@@ -335,7 +366,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           const SizedBox(height: AppSizes.md),
 
-          // Pengiriman (✅ Hanya Total dan Terkirim)
+          // Pengiriman
           _card(
             'Pengiriman',
             Icons.local_shipping_rounded,
@@ -356,8 +387,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               const SizedBox(height: AppSizes.md),
               Divider(color: Colors.grey.shade200, height: 1),
               const SizedBox(height: AppSizes.sm),
-              _infoRow('Total Uang', Formatters.currency(o.totalAmount)),
+              _infoRow('Total Uang',
+                  Formatters.currency(o.price * o.shippedQuantity)),
               _infoRow('Harga Satuan', Formatters.currency(o.price)),
+              // ✅ Catatan akan muncul di sini setelah dikirim
               if (o.note != null && o.note!.isNotEmpty)
                 _infoRow('Catatan', o.note!),
             ],

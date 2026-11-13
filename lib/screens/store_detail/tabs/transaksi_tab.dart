@@ -41,10 +41,9 @@ class _TransaksiTabState extends State<TransaksiTab> {
       _error = null;
     });
     try {
-      // ✅ Hapus parameter startDate dan endDate agar mengambil semua transaksi
       final list = await OrderService.getAll(
         storeId: widget.storeId,
-        limit: 500, // Batas maksimal data yang ditarik
+        limit: 500,
       );
       if (mounted) {
         setState(() {
@@ -59,18 +58,20 @@ class _TransaksiTabState extends State<TransaksiTab> {
     }
   }
 
-  // ✅ Hanya ambil order yang sudah ada bukti kirim / COMPLETED
+  // ✅ FITUR 2: Cek FIFO (Harus bayar nota terlama dulu)
+  bool _hasOlderUnpaidOrder(Order currentOrder) {
+    return _all.any((o) =>
+        !o.isPaid && o.date.isBefore(currentOrder.date) && o.totalAmount > 0);
+  }
+
   List<Order> get _deliveredOrders {
     return _all
         .where((o) => o.hasDeliveryProof || o.status == 'COMPLETED')
         .toList();
   }
 
-  // ✅ Filter Tab & Pengurutan
   List<Order> get _filtered {
     var list = _deliveredOrders;
-
-    // Filter berdasarkan chip (Semua, Lunas, Belum Bayar)
     switch (_filter) {
       case 'PAID':
         list = list.where((o) => o.isPaid).toList();
@@ -79,14 +80,10 @@ class _TransaksiTabState extends State<TransaksiTab> {
         list = list.where((o) => !o.isPaid).toList();
         break;
     }
-
-    // ✅ Urutkan berdasarkan tanggal: Paling lama (atas) -> Terbaru (bawah)
     list.sort((a, b) => a.date.compareTo(b.date));
-
     return list;
   }
 
-  // ✅ Ringkasan dihitung dari data yang sudah terkirim
   double get _totalAll => _deliveredOrders.fold(0, (s, o) => s + o.totalAmount);
   double get _totalPaid => _deliveredOrders
       .where((o) => o.isPaid)
@@ -130,6 +127,13 @@ class _TransaksiTabState extends State<TransaksiTab> {
   }
 
   Future<void> _askReturBeforePayment(Order order) async {
+    // ✅ FITUR 2: Cek FIFO sebelum retur
+    if (_hasOlderUnpaidOrder(order)) {
+      _snack(
+          'Terdapat nota pada tanggal sebelumnya yang belum dibayar. Lunasi nota terlama terlebih dahulu!');
+      return;
+    }
+
     int maxRetur =
         order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
     int selectedQty = 0;
@@ -575,7 +579,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Langsung tampilkan konten tanpa DateFilterWidget
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -833,12 +836,22 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final displayQty =
         o.shippedQuantity > 0 ? o.shippedQuantity : o.totalQuantity;
 
+    // ✅ FITUR 2: Cek apakah nota pernah diretur
+    final isReturned = o.note?.contains('Diretur:') ?? false;
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       child: InkWell(
         onTap: canSelect
-            ? () => _askReturBeforePayment(o)
+            ? () {
+                // ✅ FITUR 2: Jika sudah diretur, langsung centang (bayar) tanpa popup
+                if (isReturned) {
+                  _toggleSelect(o.id);
+                } else {
+                  _askReturBeforePayment(o);
+                }
+              }
             : () async {
                 await Navigator.push(
                   context,
@@ -905,17 +918,37 @@ class _TransaksiTabState extends State<TransaksiTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        Formatters.date(o.date),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF111827),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.date(o.date),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF111827),
+                            ),
+                          ),
+                          if (isReturned) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: const Text('RETUR',
+                                  style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red)),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
+                      // ✅ FITUR 3: Tampilkan Terkirim & Sisa
                       Text(
-                        '$displayQty pcs · ${Formatters.orderStatus(o.status)}',
+                        'Terkirim: $displayQty pcs · Sisa: ${o.remaining} pcs',
                         style: const TextStyle(
                           fontSize: 11,
                           color: Color(0xFF6B7280),
