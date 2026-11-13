@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
@@ -10,10 +11,8 @@ import '../../core/utils/image_stamp.dart';
 import '../../core/utils/invoice_generator.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
-import '../../services/retur_service.dart'; // ✅ Pastikan import ini ada
 import '../../widgets/status_badge.dart';
 import '../../widgets/yellow_header.dart';
-import '../../core/utils/image_picker_helper.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final String orderId;
@@ -52,7 +51,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
-    // Gunakan Map untuk menyimpan kuantitas sementara per produk
     Map<String, int> tempItemsQty = {
       for (var item in _order!.items) item.id: item.quantity
     };
@@ -82,7 +80,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: AppSizes.md),
-                    // Tampilkan List Produk untuk diedit
                     ..._order!.items.map((item) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -148,10 +145,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     if (confirm != true) return;
 
-    // Hitung ulang total quantity berdasarkan editan kurir
     final actualShipped = tempItemsQty.values.fold(0, (a, b) => a + b);
 
-    final picked = await ImagePickerHelper.pickImage(context);
+    // ✅ MUTLAK HANYA KAMERA
+    final ImagePicker picker = ImagePicker();
+    final XFile? picked = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 70,
+    );
+
     if (picked == null) return;
 
     setState(() => _saving = true);
@@ -170,7 +172,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       final b64 = base64Encode(stamped);
 
-      // Susun list items untuk dikirim ke API
       final updatedItems = _order!.items.map((item) {
         return {
           "id": item.id,
@@ -182,362 +183,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         _order!.id,
         shippedQuantity: actualShipped,
         deliveryProof: b64,
-        items: updatedItems, // Kirim editan kuantitas ke API
+        items: updatedItems,
       );
       await _load();
       _snack('Pengiriman dikirim. Menunggu persetujuan Admin.');
-    } catch (e) {
-      _snack('Gagal: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  // ============ RETUR SEBELUM BAYAR ============
-  Future<void> _askReturBeforePayment(Order order) async {
-    // ✅ Gunakan shippedQuantity (jumlah riil yang dikirim) sebagai batas maksimal
-    int maxRetur =
-        order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
-    int selectedQty = 0;
-    bool isProcessing = false;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-              ),
-              padding: EdgeInsets.only(
-                top: 24,
-                left: 24,
-                right: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Ada Barang Retur?',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Tentukan jumlah produk yang diretur sebelum melakukan pembayaran. Lewati jika tidak ada.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Quantity Selector
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: selectedQty > 0 && !isProcessing
-                            ? () => setModalState(() => selectedQty--)
-                            : null,
-                        icon: const Icon(Icons.remove_circle_outline),
-                        iconSize: 36,
-                        color: const Color(0xFFD32F2F),
-                      ),
-                      SizedBox(
-                        width: 80,
-                        child: Text(
-                          '$selectedQty',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        // Batasi dengan maxRetur
-                        onPressed: selectedQty < maxRetur && !isProcessing
-                            ? () => setModalState(() => selectedQty++)
-                            : null,
-                        icon: const Icon(Icons.add_circle_outline),
-                        iconSize: 36,
-                        color: const Color(0xFF2E7D32),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Total dikirim: $maxRetur pcs',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: isProcessing
-                              ? null
-                              : () {
-                                  Navigator.pop(ctx);
-                                  _choosePaymentMethod(); // Lanjut ke pilih metode bayar
-                                },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Tidak Ada Retur',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: isProcessing
-                              ? null
-                              : () async {
-                                  if (selectedQty == 0) {
-                                    Navigator.pop(ctx);
-                                    _choosePaymentMethod();
-                                    return;
-                                  }
-                                  setModalState(() => isProcessing = true);
-                                  try {
-                                    await ReturService.process(
-                                      orderId: order.id,
-                                      qty: selectedQty,
-                                    );
-                                    if (ctx.mounted) Navigator.pop(ctx);
-                                    _snack('Retur $selectedQty pcs diproses');
-                                    _choosePaymentMethod(); // Lanjut bayar
-                                  } catch (e) {
-                                    if (ctx.mounted)
-                                      setModalState(() => isProcessing = false);
-                                    _snack('Gagal retur: $e');
-                                  }
-                                },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF7043),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('Simpan & Lanjut',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // ============ PEMBAYARAN ============
-  Future<void> _choosePaymentMethod() async {
-    final method = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-        ),
-        padding: const EdgeInsets.all(AppSizes.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44,
-              height: 5,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            const Text(
-              'Pilih Metode Pembayaran',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF111827),
-              ),
-            ),
-            const SizedBox(height: AppSizes.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: _methodButton(
-                    icon: Icons.payments_rounded,
-                    label: 'CASH',
-                    subtitle: 'Bayar tunai',
-                    color: const Color(0xFF2E7D32),
-                    onTap: () => Navigator.pop(ctx, 'CASH'),
-                  ),
-                ),
-                const SizedBox(width: AppSizes.md),
-                Expanded(
-                  child: _methodButton(
-                    icon: Icons.account_balance_rounded,
-                    label: 'TRANSFER',
-                    subtitle: 'Upload bukti',
-                    color: const Color(0xFF1976D2),
-                    onTap: () => Navigator.pop(ctx, 'TRANSFER'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSizes.md),
-          ],
-        ),
-      ),
-    );
-
-    if (method == null) return;
-
-    if (method == 'CASH') {
-      await _setPaidCash();
-    } else {
-      await _pickAndUploadProofTransfer();
-    }
-  }
-
-  Widget _methodButton({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-            border: Border.all(color: color.withOpacity(0.3)),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF9CA3AF),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _setPaidCash() async {
-    setState(() => _saving = true);
-    try {
-      await OrderService.updatePayment(
-        _order!.id,
-        paymentStatus: 'PAID',
-        paymentMethod: 'CASH',
-      );
-      await _load();
-      _snack('Ditandai lunas (CASH)');
-    } catch (e) {
-      _snack('Gagal: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _pickAndUploadProofTransfer() async {
-    final picked = await ImagePickerHelper.pickImage(context);
-    if (picked == null) return;
-
-    setState(() => _saving = true);
-    try {
-      final raw = await picked.readAsBytes();
-      final stamped = await ImageStamp.addTimestamp(
-        raw,
-        label: 'BUKTI PEMBAYARAN',
-      );
-
-      if (stamped.length > 2 * 1024 * 1024) {
-        _snack('Gambar masih terlalu besar. Coba lagi.');
-        return;
-      }
-
-      final b64 = base64Encode(stamped);
-
-      await OrderService.updatePayment(
-        _order!.id,
-        paymentStatus: 'PAID',
-        paymentMethod: 'TRANSFER',
-        paymentProof: b64,
-      );
-      await _load();
-      _snack('Bukti transfer terkirim');
     } catch (e) {
       _snack('Gagal: $e');
     } finally {
@@ -686,7 +335,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           const SizedBox(height: AppSizes.md),
 
-          // Pengiriman
+          // Pengiriman (✅ Hanya Total dan Terkirim)
           _card(
             'Pengiriman',
             Icons.local_shipping_rounded,
@@ -701,10 +350,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   Expanded(
                     child: _qtyStat(
                         'Terkirim', o.shippedQuantity, const Color(0xFF2E7D32)),
-                  ),
-                  Expanded(
-                    child:
-                        _qtyStat('Sisa', o.remaining, const Color(0xFFE65100)),
                   ),
                 ],
               ),
@@ -973,7 +618,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget _buildActions() {
     final o = _order!;
 
-    // 1. DRAFT (Menunggu persetujuan Admin)
     if (o.status == 'DRAFT') {
       return Container(
         padding: const EdgeInsets.all(AppSizes.lg),
@@ -986,7 +630,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 2. DELIVERED
     if (o.status == 'DELIVERED') {
       return Container(
         decoration: BoxDecoration(
@@ -1014,7 +657,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // 3. COMPLETED & BELUM BAYAR -> TOMBOL BAYAR (Langsung ke Pop-up Retur)
     if (o.status == 'COMPLETED' && !o.isPaid) {
       return Container(
         decoration: BoxDecoration(
@@ -1031,63 +673,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.all(AppSizes.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Baris 1: Lihat Invoice (full width, outlined)
-                _actionButton(
-                  icon: Icons.receipt_long,
-                  label: 'Lihat Invoice',
-                  color: const Color(0xFF1976D2),
-                  onTap: _saving ? null : _printInvoice,
-                  outlined: true,
-                ),
-                const SizedBox(height: AppSizes.sm),
-                // Baris 2: Bayar Nanti + Bayar Sekarang
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed:
-                            _saving ? null : () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF6B7280),
-                          side: BorderSide(color: Colors.grey.shade400),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppSizes.radiusMd),
-                          ),
-                        ),
-                        child: const Text(
-                          'Bayar Nanti',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSizes.sm),
-                    Expanded(
-                      child: _actionButton(
-                        icon: Icons.account_balance_wallet,
-                        label: 'Bayar Sekarang',
-                        color: const Color(0xFF2E7D32),
-                        // ✅ Panggil _askReturBeforePayment
-                        onTap: _saving ? null : () => _askReturBeforePayment(o),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+            child: _actionButton(
+              icon: Icons.receipt_long,
+              label: 'Lihat Invoice',
+              color: const Color(0xFF1976D2),
+              onTap: _saving ? null : _printInvoice,
+              outlined: true,
             ),
           ),
         ),
       );
     }
 
-    // 4. COMPLETED & LUNAS -> CETAK INVOICE
     if (o.status == 'COMPLETED' && o.isPaid) {
       return Container(
         decoration: BoxDecoration(

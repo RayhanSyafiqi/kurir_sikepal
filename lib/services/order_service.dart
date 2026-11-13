@@ -37,6 +37,7 @@ class OrderService {
   static Future<List<Order>> getAll({
     String? storeId,
     String? status,
+    String? paymentStatus, // ✅ TAMBAHAN: Filter status pembayaran (UNPAID/PAID)
     DateTime? startDate,
     DateTime? endDate,
     int page = 1,
@@ -49,6 +50,8 @@ class OrderService {
         'limit': '$limit',
         if (storeId != null) 'storeId': storeId,
         if (status != null) 'status': status,
+        if (paymentStatus != null)
+          'paymentStatus': paymentStatus, // ✅ Kirim ke API
         if (startDate != null) 'startDate': _dateStr(startDate),
         if (endDate != null) 'endDate': _dateStr(endDate),
       },
@@ -94,7 +97,7 @@ class OrderService {
     String? note,
     String? status,
     String? deliveryProof,
-    List<Map<String, dynamic>>? items, // ✅ TAMBAHAN PARAMETER ITEMS
+    List<Map<String, dynamic>>? items,
   }) async {
     final res = await ApiClient.patch(
       '${ApiConfig.orderDetail(id)}/delivery',
@@ -104,7 +107,7 @@ class OrderService {
         if (note != null) 'note': note,
         if (status != null) 'status': status,
         if (deliveryProof != null) 'deliveryProof': deliveryProof,
-        if (items != null) 'items': items, // ✅ KIRIM ITEMS KE BACKEND
+        if (items != null) 'items': items,
       },
     );
     final map = _asMap(res['data'], context: 'update delivery');
@@ -130,11 +133,6 @@ class OrderService {
   }
 
   // ==================== BULK PAYMENT ====================
-  /// Bayar beberapa order sekaligus
-  ///
-  /// - [orderIds]: list ID order yang mau dibayar
-  /// - [paymentMethod]: "CASH" atau "TRANSFER"
-  /// - [paymentProof]: base64 string (wajib kalau TRANSFER)
   static Future<Map<String, dynamic>> bulkPayment({
     required List<String> orderIds,
     required String paymentMethod,
@@ -163,11 +161,6 @@ class OrderService {
   }
 
   // ==================== BULK PAYMENT DETAILED ====================
-  /// Versi bulk payment dengan return lengkap:
-  /// - updatedCount: jumlah order yang berhasil
-  /// - totalAmount: total yang dibayar
-  /// - paymentMethod
-  /// - orders: list order yang diupdate
   static Future<BulkPaymentResult> bulkPaymentDetailed({
     required List<String> orderIds,
     required String paymentMethod,

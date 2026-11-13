@@ -34,10 +34,10 @@ class _HomeScreenState extends State<HomeScreen> {
   User? _user;
   DateTime _selectedDate = DateTime.now();
   List<Order> _todayOrders = [];
-  List<Order> _yesterdayOrders = []; // ✅ Untuk Tagihan (Kemarin)
   List<ExtraOrder> _todayExtraOrders = [];
   List<Product> _products = [];
   List<Store> _stores = [];
+  List<Order> _allUnpaidOrders = [];
 
   @override
   void initState() {
@@ -56,13 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final endOfDay = DateTime.utc(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, 23, 59, 59);
 
-      // ✅ Hitung tanggal kemarin untuk Tagihan
-      final yesterday = _selectedDate.subtract(const Duration(days: 1));
-      final startYesterday =
-          DateTime.utc(yesterday.year, yesterday.month, yesterday.day);
-      final endYesterday = DateTime.utc(
-          yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
-
       final results = await Future.wait([
         AuthService.me(),
         OrderService.getAll(
@@ -76,11 +69,9 @@ class _HomeScreenState extends State<HomeScreen> {
           startDate: startOfDay,
           endDate: endOfDay,
         ),
-        // ✅ Fetch data kemarin untuk Tagihan
         OrderService.getAll(
-          startDate: startYesterday,
-          endDate: endYesterday,
-          limit: 200,
+          paymentStatus: 'UNPAID',
+          limit: 500,
         ),
       ]);
 
@@ -91,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _products = results[2] as List<Product>;
           _stores = results[3] as List<Store>;
           _todayExtraOrders = results[4] as List<ExtraOrder>;
-          _yesterdayOrders = results[5] as List<Order>; // ✅ Set data kemarin
+          _allUnpaidOrders = results[5] as List<Order>;
         });
       }
     } catch (e) {
@@ -286,17 +277,49 @@ class _HomeScreenState extends State<HomeScreen> {
       .where((o) => !o.isPaid)
       .fold(0.0, (s, o) => s + o.totalAmount);
 
-  // ✅ KPI TAGIHAN (Berdasarkan data kemarin)
-  int get _totalStoresYesterday => _yesterdayOrders.length;
-  int get _paidStoresYesterday =>
-      _yesterdayOrders.where((o) => o.isPaid).length;
-
-  // ✅ KPI LAINNYA (Berdasarkan data hari ini)
+  // ✅ KPI CALCULATIONS
+  int get _paidStores => _todayOrders.where((o) => o.isPaid).length;
   int get _totalShippedProducts =>
       _todayOrders.fold(0, (s, o) => s + o.shippedQuantity);
   int get _deliveredStores => _todayOrders
       .where((o) => o.status == 'COMPLETED' || o.status == 'DELIVERED')
       .length;
+
+  // ✅ FILTER: Hanya ambil orderan yang SUDAH DIKIRIM (punya bukti/COMPLETED) tapi BELUM BAYAR
+  List<Order> get _deliveredUnpaidOrders {
+    return _allUnpaidOrders
+        .where((o) => o.hasDeliveryProof || o.status == 'COMPLETED')
+        .toList();
+  }
+
+  int get _totalNotaTagihan => _deliveredUnpaidOrders.length;
+
+  int get _warningStoresCount {
+    final warningStoreIds = <String>{};
+
+    // ✅ Gunakan list yang sudah difilter
+    for (final o in _deliveredUnpaidOrders) {
+      final daysLate = DateTime.now()
+          .difference(DateTime(o.date.year, o.date.month, o.date.day))
+          .inDays;
+
+      final pm = o.store?.paymentMethod?.toUpperCase() ?? 'DAILY';
+
+      bool isWarning = false;
+      if (pm == 'DAILY' || pm == 'HARIAN') {
+        isWarning = daysLate > 2;
+      } else if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') {
+        isWarning = daysLate > 8;
+      } else if (pm == 'MONTHLY' || pm == 'BULANAN') {
+        isWarning = daysLate > 15;
+      }
+
+      if (isWarning && o.store?.id != null) {
+        warningStoreIds.add(o.store!.id);
+      }
+    }
+    return warningStoreIds.length;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -314,17 +337,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 totalRemaining: _totalRemaining,
                 totalAmount: _totalAmount,
                 totalPiutang: _totalPiutang,
-
-                // ✅ Tagihan (Data Kemarin)
-                totalStoresYesterday: _totalStoresYesterday,
-                paidStores: _paidStoresYesterday,
-
-                // ✅ Produk (Data Hari Ini)
+                totalStoresYesterday: _todayOrders.length,
+                paidStores: _paidStores,
                 totalShippedProducts: _totalShippedProducts,
-
-                // ✅ Lokasi (Data Hari Ini - 5 Toko)
                 totalStoresToday: _stores.length,
                 deliveredStores: _deliveredStores,
+                totalNotaTagihan: _totalNotaTagihan,
+                warningStores: _warningStoresCount,
               ),
             ),
             SliverToBoxAdapter(

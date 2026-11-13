@@ -11,12 +11,14 @@ class HomeSummaryCard extends StatelessWidget {
   final double totalAmount;
   final double totalPiutang;
 
-  // ✅ KPI Baru
-  final int totalStoresYesterday; // Khusus Tagihan (Kemarin)
-  final int paidStores; // Khusus Tagihan (Kemarin)
-  final int totalShippedProducts; // Khusus Produk (Hari ini)
-  final int totalStoresToday; // Khusus Lokasi (Hari ini)
-  final int deliveredStores; // Khusus Lokasi (Hari ini)
+  // ✅ KPI Data
+  final int totalStoresYesterday;
+  final int paidStores;
+  final int totalShippedProducts;
+  final int totalStoresToday;
+  final int deliveredStores;
+  final int totalNotaTagihan;
+  final int warningStores;
 
   const HomeSummaryCard({
     super.key,
@@ -31,6 +33,8 @@ class HomeSummaryCard extends StatelessWidget {
     required this.totalShippedProducts,
     required this.totalStoresToday,
     required this.deliveredStores,
+    required this.totalNotaTagihan,
+    required this.warningStores,
   });
 
   @override
@@ -59,58 +63,14 @@ class HomeSummaryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ============ ACTION BUTTONS ============
-              Row(
-                children: [
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.how_to_reg_rounded,
-                      label: 'ABSENSI\nMASUK',
-                      color: const Color(0xFF1B5E20),
-                      onTap: () async {
-                        final success = await AttendanceSheet.show(context);
-                        if (success == true) {
-                          _toast(context, 'Absensi berhasil terkirim!');
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.inbox_rounded,
-                      label: 'SISA\n$totalRemaining PCS',
-                      color: const Color(0xFFE65100),
-                      onTap: () => _toast(context, 'Sisa $totalRemaining pcs'),
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.account_balance_wallet_rounded,
-                      label: 'KAS KURIR\nMODUL',
-                      color: const Color(0xFF1A237E),
-                      onTap: () => _toast(context, 'Kas kurir'),
-                    ),
-                  ),
-                ],
-              ),
+              // ============ 1. ACTION BUTTON: ABSENSI ============
+              _absensiCard(context),
               const SizedBox(height: AppSizes.md),
 
-              // ============ ✅ KPI KURIR BARU ============
+              // ============ 2. KPI GRID ============
+              // Baris 1: Produk & Lokasi
               Row(
                 children: [
-                  Expanded(
-                    child: _kpiCard(
-                      title: 'TAGIHAN',
-                      current: paidStores,
-                      total: totalStoresYesterday, // ✅ Pakai data kemarin
-                      icon: Icons.receipt_long_rounded,
-                      color: const Color(0xFF2E7D32),
-                      suffix: 'Toko',
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
                   Expanded(
                     child: _kpiCard(
                       title: 'PRODUK',
@@ -121,14 +81,40 @@ class HomeSummaryCard extends StatelessWidget {
                       suffix: 'Pcs',
                     ),
                   ),
-                  const SizedBox(width: AppSizes.sm),
+                  const SizedBox(width: AppSizes.md),
                   Expanded(
                     child: _kpiCard(
                       title: 'LOKASI',
                       current: deliveredStores,
-                      total: totalStoresToday, // ✅ Pakai data hari ini
+                      total: totalStoresToday,
                       icon: Icons.location_on_rounded,
                       color: const Color(0xFFE65100),
+                      suffix: 'Toko',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSizes.md),
+
+              // Baris 2: Tagihan & Warning
+              Row(
+                children: [
+                  Expanded(
+                    child: _kpiCardCount(
+                      title: 'TAGIHAN',
+                      count: totalNotaTagihan,
+                      icon: Icons.receipt_long_rounded,
+                      color: const Color(0xFF7B1FA2),
+                      suffix: 'Nota',
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  Expanded(
+                    child: _kpiCardCount(
+                      title: 'WARNING',
+                      count: warningStores,
+                      icon: Icons.warning_rounded,
+                      color: const Color(0xFFD32F2F),
                       suffix: 'Toko',
                     ),
                   ),
@@ -285,7 +271,66 @@ class HomeSummaryCard extends StatelessWidget {
     );
   }
 
-  // ============ WIDGET KPI BARU ============
+  // ============ WIDGET KPI ============
+
+  // 1. Tombol Absensi (Full Width)
+  Widget _absensiCard(BuildContext context) {
+    return Material(
+      color: const Color(0xFF1B5E20), // Warna hijau gelap
+      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      child: InkWell(
+        onTap: () async {
+          final success = await AttendanceSheet.show(context);
+          if (success == true) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Absensi berhasil terkirim!')),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSizes.lg, vertical: AppSizes.md),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.how_to_reg_rounded,
+                    color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ABSENSI MASUK',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Klik di sini untuk absen hari ini',
+                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 2. KPI dengan Persentase (Produk & Lokasi)
   Widget _kpiCard({
     required String title,
     required int current,
@@ -297,42 +342,57 @@ class HomeSummaryCard extends StatelessWidget {
     final percentage = total == 0 ? 0.0 : (current / total).clamp(0.0, 1.0);
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.all(AppSizes.md),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            title,
-            style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: color.withOpacity(0.8)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF6B7280)),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                    text: '$current',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: color)),
-                TextSpan(
-                    text: ' / $total $suffix',
-                    style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6B7280))),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$current',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    height: 1),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '/ $total $suffix',
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9CA3AF)),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -340,6 +400,89 @@ class HomeSummaryCard extends StatelessWidget {
               minHeight: 6,
               backgroundColor: color.withOpacity(0.1),
               valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. KPI Count / Angka Saja (Tagihan & Warning)
+  Widget _kpiCardCount({
+    required String title,
+    required int count,
+    required IconData icon,
+    required Color color,
+    required String suffix,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF6B7280)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$count',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    height: 1),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                suffix,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9CA3AF)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Garis aksen tipis sebagai pengganti progress bar
+          Container(
+            height: 6,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: 1.0, // Full bar
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
             ),
           ),
         ],
@@ -444,56 +587,7 @@ class HomeSummaryCard extends StatelessWidget {
     );
   }
 
-  Widget _actionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: 0.3,
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ============ HELPERS ============
-  void _toast(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 1)),
-    );
-  }
-
   String _formatNumber(double v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}jt';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(0)}rb';

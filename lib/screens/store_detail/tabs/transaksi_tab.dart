@@ -10,7 +10,6 @@ import '../../../core/utils/invoice_generator.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 import '../../../services/retur_service.dart';
-import '../../../widgets/date_filter_widget.dart';
 import '../../order/order_detail_screen.dart';
 
 class TransaksiTab extends StatefulWidget {
@@ -26,7 +25,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
   bool _loading = true;
   String? _error;
   String _filter = 'ALL';
-  DateTime _selectedDate = DateTime.now();
 
   final Set<String> _selectedIds = {};
   bool _bulkProcessing = false;
@@ -43,15 +41,10 @@ class _TransaksiTabState extends State<TransaksiTab> {
       _error = null;
     });
     try {
-      final start =
-          DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-      final end = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, 23, 59, 59);
+      // ✅ Hapus parameter startDate dan endDate agar mengambil semua transaksi
       final list = await OrderService.getAll(
         storeId: widget.storeId,
-        startDate: start,
-        endDate: end,
-        limit: 200,
+        limit: 500, // Batas maksimal data yang ditarik
       );
       if (mounted) {
         setState(() {
@@ -66,24 +59,42 @@ class _TransaksiTabState extends State<TransaksiTab> {
     }
   }
 
-  List<Order> get _filtered {
-    switch (_filter) {
-      case 'PAID':
-        return _all.where((o) => o.isPaid).toList();
-      case 'UNPAID':
-        return _all.where((o) => !o.isPaid).toList();
-      default:
-        return _all;
-    }
+  // ✅ Hanya ambil order yang sudah ada bukti kirim / COMPLETED
+  List<Order> get _deliveredOrders {
+    return _all
+        .where((o) => o.hasDeliveryProof || o.status == 'COMPLETED')
+        .toList();
   }
 
-  double get _totalAll => _all.fold(0, (s, o) => s + o.totalAmount);
-  double get _totalPaid =>
-      _all.where((o) => o.isPaid).fold(0, (s, o) => s + o.totalAmount);
+  // ✅ Filter Tab & Pengurutan
+  List<Order> get _filtered {
+    var list = _deliveredOrders;
+
+    // Filter berdasarkan chip (Semua, Lunas, Belum Bayar)
+    switch (_filter) {
+      case 'PAID':
+        list = list.where((o) => o.isPaid).toList();
+        break;
+      case 'UNPAID':
+        list = list.where((o) => !o.isPaid).toList();
+        break;
+    }
+
+    // ✅ Urutkan berdasarkan tanggal: Paling lama (atas) -> Terbaru (bawah)
+    list.sort((a, b) => a.date.compareTo(b.date));
+
+    return list;
+  }
+
+  // ✅ Ringkasan dihitung dari data yang sudah terkirim
+  double get _totalAll => _deliveredOrders.fold(0, (s, o) => s + o.totalAmount);
+  double get _totalPaid => _deliveredOrders
+      .where((o) => o.isPaid)
+      .fold(0, (s, o) => s + o.totalAmount);
   double get _totalUnpaid => _totalAll - _totalPaid;
 
   double get _selectedTotal {
-    return _all
+    return _deliveredOrders
         .where((o) => _selectedIds.contains(o.id))
         .fold(0, (s, o) => s + o.totalAmount);
   }
@@ -118,7 +129,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
     setState(() => _selectedIds.clear());
   }
 
-  // ✅ FITUR RETUR SEBELUM PEMBAYARAN (Bottom Sheet)
   Future<void> _askReturBeforePayment(Order order) async {
     int maxRetur =
         order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
@@ -175,8 +185,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                     style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                   ),
                   const SizedBox(height: 24),
-
-                  // Quantity Selector
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -218,7 +226,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                     ),
                   ),
                   const SizedBox(height: 32),
-
                   Row(
                     children: [
                       Expanded(
@@ -568,42 +575,32 @@ class _TransaksiTabState extends State<TransaksiTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        DateFilterWidget(
-          selectedDate: _selectedDate,
-          onDateChanged: (date) {
-            setState(() => _selectedDate = date);
-            _load();
-          },
+    // ✅ Langsung tampilkan konten tanpa DateFilterWidget
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSizes.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: _load,
+                child: const Text('Coba lagi'),
+              ),
+            ],
+          ),
         ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSizes.xl),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.cloud_off,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 12),
-                            Text(_error!, textAlign: TextAlign.center),
-                            const SizedBox(height: 12),
-                            FilledButton.tonal(
-                              onPressed: _load,
-                              child: const Text('Coba lagi'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : _buildContent(),
-        ),
-      ],
-    );
+      );
+    }
+
+    return _buildContent();
   }
 
   Widget _buildContent() {
@@ -817,7 +814,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
                 ? 'Belum ada transaksi lunas'
                 : _filter == 'UNPAID'
                     ? 'Tidak ada piutang'
-                    : 'Belum ada transaksi',
+                    : 'Belum ada transaksi terkirim',
             style: const TextStyle(
               fontSize: 13,
               color: Color(0xFF6B7280),
@@ -833,7 +830,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final isSelected = _selectedIds.contains(o.id);
     final canSelect = !o.isPaid;
 
-    // ✅ Gunakan shippedQuantity jika ada, jika 0 baru pakai totalQuantity
     final displayQty =
         o.shippedQuantity > 0 ? o.shippedQuantity : o.totalQuantity;
 
@@ -919,7 +915,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        // ✅ Gunakan displayQty
                         '$displayQty pcs · ${Formatters.orderStatus(o.status)}',
                         style: const TextStyle(
                           fontSize: 11,
