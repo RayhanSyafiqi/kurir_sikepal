@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_sizes.dart';
+import '../../core/utils/formatters.dart';
 import '../../models/extra_order_model.dart';
 import '../../models/order_model.dart';
 import '../../models/product_model.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Product> _products = [];
   List<Store> _stores = [];
   List<Order> _allUnpaidOrders = [];
+  List<Order> _weeklyOrders = [];
 
   @override
   void initState() {
@@ -56,6 +58,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final endOfDay = DateTime.utc(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, 23, 59, 59);
 
+      final now = DateTime.now();
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final friday = monday.add(const Duration(days: 4));
+      final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+      final endOfWeek =
+          DateTime(friday.year, friday.month, friday.day, 23, 59, 59);
+
       final results = await Future.wait([
         AuthService.me(),
         OrderService.getAll(
@@ -73,6 +82,11 @@ class _HomeScreenState extends State<HomeScreen> {
           paymentStatus: 'UNPAID',
           limit: 500,
         ),
+        OrderService.getAll(
+          startDate: startOfWeek,
+          endDate: endOfWeek,
+          limit: 500,
+        ),
       ]);
 
       if (mounted) {
@@ -83,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _stores = results[3] as List<Store>;
           _todayExtraOrders = results[4] as List<ExtraOrder>;
           _allUnpaidOrders = results[5] as List<Order>;
+          _weeklyOrders = results[6] as List<Order>;
         });
       }
     } catch (e) {
@@ -92,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ✅ 1. HITUNG JUMLAH NOTA PIUTANG PER TOKO
   int _getStoreUnpaidCount(String storeId) {
     return _allUnpaidOrders
         .where((o) =>
@@ -101,7 +115,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .length;
   }
 
-  // ✅ 2. HITUNG TOTAL UANG PIUTANG PER TOKO
   double _getStorePiutang(String storeId) {
     return _allUnpaidOrders
         .where((o) =>
@@ -110,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .fold(0.0, (sum, o) => sum + o.totalAmount);
   }
 
-  // ✅ 3. CEK WARNING TENGGAT WAKTU
   bool _isStoreWarning(String storeId, String? paymentMethod) {
     final storeUnpaid = _allUnpaidOrders
         .where((o) =>
@@ -313,6 +325,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return map;
   }
 
+  Map<String, int> get _productTargets {
+    final map = <String, int>{};
+    for (final o in _todayOrders) {
+      for (final item in o.items) {
+        final name = item.productName ?? 'Unknown';
+        map[name] = (map[name] ?? 0) + item.quantity;
+      }
+    }
+    return map;
+  }
+
   int get _totalQty => _productSummary.values.fold(0, (a, b) => a + b);
   int get _totalRemaining => _todayOrders.fold(0, (s, o) => s + o.remaining);
   double get _totalAmount =>
@@ -324,14 +347,59 @@ class _HomeScreenState extends State<HomeScreen> {
   int get _paidStores => _todayOrders.where((o) => o.isPaid).length;
   int get _totalShippedProducts =>
       _todayOrders.fold(0, (s, o) => s + o.shippedQuantity);
-  int get _deliveredStores => _todayOrders
-      .where((o) => o.status == 'COMPLETED' || o.status == 'DELIVERED')
-      .length;
+  int get _totalSisaProducts =>
+      _todayOrders.fold(0, (s, o) => s + o.sisaQuantity);
+
+  int get _deliveredStores {
+    final doneStoreIds = _todayOrders
+        .where((o) => o.status == 'COMPLETED' || o.hasDeliveryProof)
+        .map((o) => o.store?.id)
+        .whereType<String>()
+        .toSet();
+
+    return _stores.where((s) => doneStoreIds.contains(s.id)).length;
+  }
+
+  double get _dailyPerformance {
+    if (_stores.isEmpty) return 0.0;
+    return (_deliveredStores / _stores.length) * 100;
+  }
+
+  double get _weeklyPerformance {
+    final totalStores = _weeklyOrders
+        .map((o) => o.store?.id)
+        .whereType<String>()
+        .toSet()
+        .length;
+    if (totalStores == 0) return 0.0;
+
+    final doneStores = _weeklyOrders
+        .where((o) => o.status == 'COMPLETED' || o.hasDeliveryProof)
+        .map((o) => o.store?.id)
+        .whereType<String>()
+        .toSet()
+        .length;
+
+    return (doneStores / totalStores) * 100;
+  }
 
   List<Order> get _deliveredUnpaidOrders {
     return _allUnpaidOrders
         .where((o) => o.hasDeliveryProof || o.status == 'COMPLETED')
         .toList();
+  }
+
+  // ✅ PERBAIKAN: Tgk Kemarin benar-benar hanya untuk tanggal kemarin (contoh: hari ini 16, maka hanya hitung tanggal 15)
+  int get _totalNotaTagihanKemarin {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+
+    return _deliveredUnpaidOrders.where((o) {
+      final d = o.date.toLocal();
+      return d.year == yesterday.year &&
+          d.month == yesterday.month &&
+          d.day == yesterday.day;
+    }).length;
   }
 
   int get _totalNotaTagihan => _deliveredUnpaidOrders.length;
@@ -354,6 +422,261 @@ class _HomeScreenState extends State<HomeScreen> {
       if (isWarning && o.store?.id != null) warningStoreIds.add(o.store!.id);
     }
     return warningStoreIds.length;
+  }
+
+  void _showKpiDetail(String title, Widget content) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.7,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 16, bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg),
+                child: Row(
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    )
+                  ],
+                ),
+              ),
+              const Divider(),
+              Expanded(child: content),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showProductDetail() {
+    final targets = _productTargets;
+    final shipped = _productSummary;
+
+    _showKpiDetail(
+      'Detail Pengiriman Produk',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: targets.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final name = targets.keys.elementAt(i);
+          final target = targets[name] ?? 0;
+          final done = shipped[name] ?? 0;
+          final isDone = done >= target;
+
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor:
+                  isDone ? Colors.green.shade100 : Colors.orange.shade100,
+              child: Icon(
+                isDone ? Icons.check : Icons.inventory_2,
+                color: isDone ? Colors.green : Colors.orange,
+                size: 20,
+              ),
+            ),
+            title:
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Terkirim: $done / $target pcs'),
+            trailing: isDone
+                ? const Text('Selesai',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold))
+                : Text('Kurang ${target - done}',
+                    style: TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.bold)),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showLocationDetail({bool isWeekly = false}) {
+    final orders = isWeekly ? _weeklyOrders : _todayOrders;
+    final storeIds = orders.map((o) => o.store?.id).whereType<String>().toSet();
+    final storeList = _stores.where((s) => storeIds.contains(s.id)).toList();
+
+    _showKpiDetail(
+      isWeekly ? 'Detail Performa Mingguan' : 'Detail Lokasi Hari Ini',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: storeList.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final store = storeList[i];
+          final order = orders.firstWhere((o) => o.store?.id == store.id,
+              orElse: () => null as dynamic);
+          final isDone = order != null &&
+              (order.status == 'COMPLETED' || order.hasDeliveryProof);
+
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor:
+                  isDone ? Colors.green.shade100 : Colors.red.shade100,
+              child: Icon(
+                isDone ? Icons.check : Icons.location_off,
+                color: isDone ? Colors.green : Colors.red,
+                size: 20,
+              ),
+            ),
+            title: Text(store.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(isDone ? 'Sudah dikunjungi' : 'Belum dikunjungi'),
+            trailing: isDone
+                ? const Text('Selesai',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold))
+                : const Text('Belum',
+                    style: TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.bold)),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSisaDetail() {
+    final sisaOrders = _todayOrders.where((o) => o.sisaQuantity > 0).toList();
+
+    _showKpiDetail(
+      'Detail Sisa Produk (Tidak Terjual)',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: sisaOrders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = sisaOrders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFFFF3E0),
+              child: Icon(Icons.inventory, color: Colors.orange, size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Terkirim: ${order.shippedQuantity} pcs'),
+            trailing: Text(
+              'Sisa: ${order.sisaQuantity} pcs',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showTagihanDetail({bool isYesterday = false}) {
+    var orders = _deliveredUnpaidOrders;
+
+    if (isYesterday) {
+      final now = DateTime.now();
+      final yesterday = now.subtract(const Duration(days: 1));
+
+      orders = orders.where((o) {
+        final d = o.date.toLocal();
+        return d.year == yesterday.year &&
+            d.month == yesterday.month &&
+            d.day == yesterday.day;
+      }).toList();
+    }
+
+    _showKpiDetail(
+      isYesterday ? 'Detail Tagihan Kemarin' : 'Detail Semua Nota Tagihan',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: orders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = orders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFF3E5F5),
+              child:
+                  Icon(Icons.receipt_long, color: Color(0xFF7B1FA2), size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                '${Formatters.date(order.date)} • ${order.totalQuantity} pcs'),
+            trailing: Text(
+              Formatters.currency(order.totalAmount),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showWarningDetail() {
+    final warningOrders = _deliveredUnpaidOrders.where((o) {
+      final daysLate = DateTime.now()
+          .difference(DateTime(o.date.year, o.date.month, o.date.day))
+          .inDays;
+      final pm = o.store?.paymentMethod?.toUpperCase() ?? 'DAILY';
+      if (pm == 'DAILY' || pm == 'HARIAN') return daysLate > 2;
+      if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') return daysLate > 8;
+      if (pm == 'MONTHLY' || pm == 'BULANAN') return daysLate > 15;
+      return false;
+    }).toList();
+
+    _showKpiDetail(
+      'Detail Toko Warning',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: warningOrders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = warningOrders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFFFEBEE),
+              child: Icon(Icons.warning_rounded,
+                  color: Color(0xFFD32F2F), size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                'Tenggat: ${Formatters.paymentMethod(order.store?.paymentMethod)}'),
+            trailing: Text(
+              Formatters.currency(order.totalAmount),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -379,6 +702,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 deliveredStores: _deliveredStores,
                 totalNotaTagihan: _totalNotaTagihan,
                 warningStores: _warningStoresCount,
+                dailyPerformance: _dailyPerformance,
+                weeklyPerformance: _weeklyPerformance,
+                totalSisaProducts: _totalSisaProducts,
+                totalNotaTagihanKemarin: _totalNotaTagihanKemarin,
+                onProductTap: _showProductDetail,
+                onLocationTap: () => _showLocationDetail(isWeekly: false),
+                onTagihanTap: () => _showTagihanDetail(isYesterday: false),
+                onWarningTap: _showWarningDetail,
+                onDailyTap: () => _showLocationDetail(isWeekly: false),
+                onWeeklyTap: () => _showLocationDetail(isWeekly: true),
+                onSisaTap: _showSisaDetail,
+                onTagihanKemarinTap: () =>
+                    _showTagihanDetail(isYesterday: true),
               ),
             ),
             SliverToBoxAdapter(
@@ -587,15 +923,15 @@ class _HomeScreenState extends State<HomeScreen> {
           final store = _stores[i];
           final todayOrder = _findTodayOrderForStore(store.id);
 
-          final int totalNota = _getStoreUnpaidCount(store.id); // ✅ Hitung Nota
+          final int totalNota = _getStoreUnpaidCount(store.id);
           final double piutang = _getStorePiutang(store.id);
           final bool isWarning = _isStoreWarning(store.id, store.paymentMethod);
 
           return StoreSummaryCard(
             store: store,
             todayOrder: todayOrder,
-            totalNota: totalNota, // ✅ Passing Jumlah Nota
-            totalPiutang: piutang, // ✅ Passing Total Uang
+            totalNota: totalNota,
+            totalPiutang: piutang,
             isWarning: isWarning,
             onTap: () => _openStoreDetail(store),
           );

@@ -19,10 +19,17 @@ class ReturService {
   static Future<Map<String, dynamic>> process({
     required String orderId,
     required int qty,
+    int sisaQuantity = 0, // ✅ Ubah menjadi optional dengan default 0
+    String? reason,
   }) async {
     final res = await ApiClient.post(
       ApiConfig.retur,
-      body: {'orderId': orderId, 'qty': qty},
+      body: {
+        'orderId': orderId,
+        'qty': qty,
+        'sisaQuantity': sisaQuantity,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      },
     );
     return res['data'] as Map<String, dynamic>;
   }

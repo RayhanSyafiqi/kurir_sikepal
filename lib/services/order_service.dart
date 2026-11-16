@@ -37,7 +37,7 @@ class OrderService {
   static Future<List<Order>> getAll({
     String? storeId,
     String? status,
-    String? paymentStatus, // ✅ TAMBAHAN: Filter status pembayaran (UNPAID/PAID)
+    String? paymentStatus,
     DateTime? startDate,
     DateTime? endDate,
     int page = 1,
@@ -50,8 +50,7 @@ class OrderService {
         'limit': '$limit',
         if (storeId != null) 'storeId': storeId,
         if (status != null) 'status': status,
-        if (paymentStatus != null)
-          'paymentStatus': paymentStatus, // ✅ Kirim ke API
+        if (paymentStatus != null) 'paymentStatus': paymentStatus,
         if (startDate != null) 'startDate': _dateStr(startDate),
         if (endDate != null) 'endDate': _dateStr(endDate),
       },
@@ -90,6 +89,7 @@ class OrderService {
   }
 
   // ==================== UPDATE DELIVERY ====================
+  // ✅ sisaQuantity & returQuantity DIHAPUS dari sini (dipindah ke ReturService)
   static Future<Order> updateDelivery(
     String id, {
     int? shippedQuantity,

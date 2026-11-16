@@ -42,7 +42,7 @@ class _ReturTabState extends State<ReturTab> {
           _selectedDate.day, 23, 59, 59);
 
       final all = await ReturService.getList();
-      // ✅ Filter inklusif (order 00:00:00 & 23:59:59 tetap masuk)
+      // ✅ Filter inklusif
       final filtered = all.where((x) {
         return x.store?.id == widget.storeId &&
             x.totalQuantity > 0 &&
@@ -59,8 +59,11 @@ class _ReturTabState extends State<ReturTab> {
   }
 
   Future<void> _showReturDialog(Order order) async {
-    final qtyCtrl = TextEditingController(text: '${order.totalQuantity}');
-    final formKey = GlobalKey<FormState>();
+    // ✅ Siapkan Controller
+    final qtyCtrl = TextEditingController(text: '0');
+    final reasonCtrl = TextEditingController();
+    final sisaCtrl = TextEditingController(text: '${order.sisaQuantity}');
+
     bool submitting = false;
 
     await showDialog(
@@ -72,8 +75,7 @@ class _ReturTabState extends State<ReturTab> {
             borderRadius: BorderRadius.circular(AppSizes.radiusLg),
           ),
           title: const Text('Ajukan Retur'),
-          content: Form(
-            key: formKey,
+          content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -85,26 +87,44 @@ class _ReturTabState extends State<ReturTab> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Total order: ${order.totalQuantity} pcs',
+                  'Total terkirim: ${order.shippedQuantity} pcs',
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: AppSizes.md),
+
+                // ✅ Input Jumlah Retur
                 TextFormField(
                   controller: qtyCtrl,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Jumlah diretur (pcs)',
                     border: OutlineInputBorder(),
+                    isDense: true,
                   ),
-                  validator: (v) {
-                    final n = int.tryParse(v ?? '');
-                    if (n == null || n <= 0) return 'Masukkan angka > 0';
-                    if (n > order.totalQuantity) {
-                      return 'Maksimal ${order.totalQuantity}';
-                    }
-                    return null;
-                  },
+                ),
+                const SizedBox(height: 10),
+
+                // ✅ Input Alasan Retur
+                TextFormField(
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Alasan Retur (Rusak, dll)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // ✅ Input Sisa
+                TextFormField(
+                  controller: sisaCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Sisa (Tidak terjual)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
               ],
             ),
@@ -118,13 +138,16 @@ class _ReturTabState extends State<ReturTab> {
               onPressed: submitting
                   ? null
                   : () async {
-                      if (!formKey.currentState!.validate()) return;
                       setDialogState(() => submitting = true);
                       try {
-                        // ✅ Sesuai signature ReturService.process()
+                        final qty = int.tryParse(qtyCtrl.text) ?? 0;
+                        final sisa = int.tryParse(sisaCtrl.text) ?? 0;
+
                         await ReturService.process(
                           orderId: order.id,
-                          qty: int.parse(qtyCtrl.text),
+                          qty: qty,
+                          sisaQuantity: sisa,
+                          reason: reasonCtrl.text.trim(),
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                         _snack('Retur berhasil diajukan');
@@ -145,7 +168,7 @@ class _ReturTabState extends State<ReturTab> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Ajukan'),
+                  : const Text('Simpan'),
             ),
           ],
         ),

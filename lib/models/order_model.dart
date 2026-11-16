@@ -9,6 +9,8 @@ class Order {
   final String? courierName;
   final int totalQuantity;
   final int shippedQuantity;
+  final int sisaQuantity; // ✅ TAMBAHAN
+  final int returQuantity; // ✅ TAMBAHAN
   final double price;
   final double totalAmount;
   final int remaining;
@@ -31,6 +33,8 @@ class Order {
     this.courierName,
     required this.totalQuantity,
     required this.shippedQuantity,
+    this.sisaQuantity = 0, // ✅ TAMBAHAN
+    this.returQuantity = 0, // ✅ TAMBAHAN
     required this.price,
     required this.totalAmount,
     required this.remaining,
@@ -52,11 +56,12 @@ class Order {
       status: _str(json['status'], 'DELIVERED'),
       courierId: _str(json['courierId']),
       name: _str(json['name']),
-      courierName: json['courierName'] == null
-          ? null
-          : _str(json['courierName']), // ✅ BARU
+      courierName:
+          json['courierName'] == null ? null : _str(json['courierName']),
       totalQuantity: _int(json['totalQuantity']),
       shippedQuantity: _int(json['shippedQuantity']),
+      sisaQuantity: _int(json['sisaQuantity']), // ✅ TAMBAHAN
+      returQuantity: _int(json['returQuantity']), // ✅ TAMBAHAN
       price: _double(json['price']),
       totalAmount: _double(json['totalAmount']),
       remaining: _int(json['remaining']),

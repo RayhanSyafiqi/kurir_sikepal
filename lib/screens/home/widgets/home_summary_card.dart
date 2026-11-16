@@ -11,7 +11,7 @@ class HomeSummaryCard extends StatelessWidget {
   final double totalAmount;
   final double totalPiutang;
 
-  // ✅ KPI Data
+  // KPI Data
   final int totalStoresYesterday;
   final int paidStores;
   final int totalShippedProducts;
@@ -19,6 +19,20 @@ class HomeSummaryCard extends StatelessWidget {
   final int deliveredStores;
   final int totalNotaTagihan;
   final int warningStores;
+  final double dailyPerformance;
+  final double weeklyPerformance;
+  final int totalSisaProducts;
+  final int totalNotaTagihanKemarin;
+
+  // Callback
+  final VoidCallback? onProductTap;
+  final VoidCallback? onLocationTap;
+  final VoidCallback? onTagihanTap;
+  final VoidCallback? onWarningTap;
+  final VoidCallback? onDailyTap;
+  final VoidCallback? onWeeklyTap;
+  final VoidCallback? onSisaTap;
+  final VoidCallback? onTagihanKemarinTap;
 
   const HomeSummaryCard({
     super.key,
@@ -35,6 +49,18 @@ class HomeSummaryCard extends StatelessWidget {
     required this.deliveredStores,
     required this.totalNotaTagihan,
     required this.warningStores,
+    required this.dailyPerformance,
+    required this.weeklyPerformance,
+    required this.totalSisaProducts,
+    required this.totalNotaTagihanKemarin,
+    this.onProductTap,
+    this.onLocationTap,
+    this.onTagihanTap,
+    this.onWarningTap,
+    this.onDailyTap,
+    this.onWeeklyTap,
+    this.onSisaTap,
+    this.onTagihanKemarinTap,
   });
 
   @override
@@ -63,12 +89,11 @@ class HomeSummaryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ============ 1. ACTION BUTTON: ABSENSI ============
+              // 1. ACTION BUTTON: ABSENSI
               _absensiCard(context),
               const SizedBox(height: AppSizes.md),
 
-              // ============ 2. KPI GRID ============
-              // Baris 1: Produk & Lokasi
+              // 2. KPI GRID 3 KOLOM (Baris 1)
               Row(
                 children: [
                   Expanded(
@@ -79,9 +104,21 @@ class HomeSummaryCard extends StatelessWidget {
                       icon: Icons.inventory_2_rounded,
                       color: const Color(0xFF1976D2),
                       suffix: 'Pcs',
+                      onTap: onProductTap,
                     ),
                   ),
-                  const SizedBox(width: AppSizes.md),
+                  const SizedBox(width: AppSizes.sm),
+                  Expanded(
+                    child: _kpiCardCount(
+                      title: 'SISA',
+                      count: totalSisaProducts,
+                      icon: Icons.inventory,
+                      color: const Color(0xFFF57C00),
+                      suffix: 'Pcs',
+                      onTap: onSisaTap,
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.sm),
                   Expanded(
                     child: _kpiCard(
                       title: 'LOKASI',
@@ -90,13 +127,14 @@ class HomeSummaryCard extends StatelessWidget {
                       icon: Icons.location_on_rounded,
                       color: const Color(0xFFE65100),
                       suffix: 'Toko',
+                      onTap: onLocationTap,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSizes.md),
 
-              // Baris 2: Tagihan & Warning
+              // 3. KPI GRID 3 KOLOM (Baris 2)
               Row(
                 children: [
                   Expanded(
@@ -106,9 +144,10 @@ class HomeSummaryCard extends StatelessWidget {
                       icon: Icons.receipt_long_rounded,
                       color: const Color(0xFF7B1FA2),
                       suffix: 'Nota',
+                      onTap: onTagihanTap,
                     ),
                   ),
-                  const SizedBox(width: AppSizes.md),
+                  const SizedBox(width: AppSizes.sm),
                   Expanded(
                     child: _kpiCardCount(
                       title: 'WARNING',
@@ -116,6 +155,44 @@ class HomeSummaryCard extends StatelessWidget {
                       icon: Icons.warning_rounded,
                       color: const Color(0xFFD32F2F),
                       suffix: 'Toko',
+                      onTap: onWarningTap,
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.sm),
+                  Expanded(
+                    child: _kpiCardCount(
+                      title: 'TGK KMRN',
+                      count: totalNotaTagihanKemarin,
+                      icon: Icons.history_rounded,
+                      color: const Color(0xFFC2185B),
+                      suffix: 'Nota',
+                      onTap: onTagihanKemarinTap,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSizes.md),
+
+              // 4. KPI PERFORMANCE 2 KOLOM
+              Row(
+                children: [
+                  Expanded(
+                    child: _kpiPerformanceCard(
+                      title: 'HARIAN',
+                      percentage: dailyPerformance,
+                      icon: Icons.speed_rounded,
+                      color: const Color(0xFF00BCD4),
+                      onTap: onDailyTap,
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  Expanded(
+                    child: _kpiPerformanceCard(
+                      title: 'MINGGUAN',
+                      percentage: weeklyPerformance,
+                      icon: Icons.calendar_today_rounded,
+                      color: const Color(0xFF673AB7),
+                      onTap: onWeeklyTap,
                     ),
                   ),
                 ],
@@ -272,11 +349,9 @@ class HomeSummaryCard extends StatelessWidget {
   }
 
   // ============ WIDGET KPI ============
-
-  // 1. Tombol Absensi (Full Width)
   Widget _absensiCard(BuildContext context) {
     return Material(
-      color: const Color(0xFF1B5E20), // Warna hijau gelap
+      color: const Color(0xFF1B5E20),
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       child: InkWell(
         onTap: () async {
@@ -330,7 +405,6 @@ class HomeSummaryCard extends StatelessWidget {
     );
   }
 
-  // 2. KPI dengan Persentase (Produk & Lokasi)
   Widget _kpiCard({
     required String title,
     required int current,
@@ -338,159 +412,266 @@ class HomeSummaryCard extends StatelessWidget {
     required IconData icon,
     required Color color,
     required String suffix,
+    VoidCallback? onTap,
   }) {
     final percentage = total == 0 ? 0.0 : (current / total).clamp(0.0, 1.0);
 
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.md),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.all(AppSizes.sm + 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(icon, color: color, size: 14),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF6B7280)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$current',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        height: 1),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: Text(
+                      '/ $total $suffix',
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF9CA3AF)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: percentage,
+                  minHeight: 4,
+                  backgroundColor: color.withOpacity(0.1),
+                  valueColor: AlwaysStoppedAnimation(color),
                 ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF6B7280)),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$current',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                    height: 1),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '/ $total $suffix',
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF9CA3AF)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: percentage,
-              minHeight: 6,
-              backgroundColor: color.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation(color),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // 3. KPI Count / Angka Saja (Tagihan & Warning)
   Widget _kpiCardCount({
     required String title,
     required int count,
     required IconData icon,
     required Color color,
     required String suffix,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.md),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.all(AppSizes.sm + 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(icon, color: color, size: 14),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF6B7280)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        height: 1),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: Text(
+                      suffix,
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF9CA3AF)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.all(6),
+                height: 4,
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF6B7280)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$count',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                    height: 1),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                suffix,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF9CA3AF)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Garis aksen tipis sebagai pengganti progress bar
-          Container(
-            height: 6,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: 1.0, // Full bar
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color,
                   borderRadius: BorderRadius.circular(4),
                 ),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: 1.0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ============ WIDGETS BAWAAN ANDA ============
+  Widget _kpiPerformanceCard({
+    required String title,
+    required double percentage,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    final safePct = percentage.clamp(0.0, 100.0);
+    final displayPct = safePct.toStringAsFixed(1);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        child: Container(
+          padding: const EdgeInsets.all(AppSizes.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: color, size: 16),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF6B7280)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    displayPct,
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        height: 1),
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    '%',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: color),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: safePct / 100,
+                  minHeight: 6,
+                  backgroundColor: color.withOpacity(0.1),
+                  valueColor: AlwaysStoppedAnimation(color),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _productGrid() {
     final entries = productSummary.entries.toList();
     return SingleChildScrollView(
@@ -587,7 +768,6 @@ class HomeSummaryCard extends StatelessWidget {
     );
   }
 
-  // ============ HELPERS ============
   String _formatNumber(double v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}jt';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(0)}rb';

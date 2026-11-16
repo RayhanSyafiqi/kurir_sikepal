@@ -53,11 +53,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   // ============ PENGIRIMAN ============
   Future<void> _captureDeliveryProof() async {
-    // Map untuk menyimpan kuantitas sementara per produk
     Map<String, int> tempItemsQty = {
       for (var item in _order!.items) item.id: item.quantity
     };
-    // ✅ Controller untuk Catatan Kurir
+
     final noteCtrl = TextEditingController(text: _order!.note ?? '');
     final formKey = GlobalKey<FormState>();
 
@@ -81,11 +80,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Ubah jumlah jika ada barang yang tidak diterima. Perubahan ini akan meminta persetujuan Admin sebelum pembayaran.',
+                      'Ubah jumlah jika ada barang yang tidak diterima. Laporan retur/sisa dapat diisi di menu transaksi.',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: AppSizes.md),
-                    // List Produk
                     ..._order!.items.map((item) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -124,8 +122,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       );
                     }),
-
-                    // ✅ TAMBAHAN: Input Catatan Kurir
                     const SizedBox(height: AppSizes.md),
                     const Text(
                       'Catatan Kurir (Opsional)',
@@ -171,7 +167,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     final actualShipped = tempItemsQty.values.fold(0, (a, b) => a + b);
 
-    // Hanya Kamera (Kecuali di Desktop untuk testing)
     ImageSource source = ImageSource.camera;
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
@@ -179,24 +174,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
 
     final ImagePicker picker = ImagePicker();
-    final XFile? picked = await picker.pickImage(
-      source: source,
-      imageQuality: 70,
-    );
-
+    final XFile? picked =
+        await picker.pickImage(source: source, imageQuality: 70);
     if (picked == null) return;
 
     setState(() => _saving = true);
     try {
       final raw = await picked.readAsBytes();
-      final stamped = await ImageStamp.addTimestamp(
-        raw,
-        label: 'BUKTI PENGIRIMAN',
-      );
+      final stamped =
+          await ImageStamp.addTimestamp(raw, label: 'BUKTI PENGIRIMAN');
 
       if (stamped.length > 2 * 1024 * 1024) {
-        _snack(
-            'Gambar masih terlalu besar. Coba foto dengan resolusi lebih rendah.');
+        _snack('Gambar masih terlalu besar.');
         return;
       }
 
@@ -214,7 +203,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         shippedQuantity: actualShipped,
         deliveryProof: b64,
         items: updatedItems,
-        note: noteCtrl.text.trim(), // ✅ Kirim catatan ke API
+        note: noteCtrl.text.trim(),
       );
       await _load();
       _snack('Pengiriman dikirim. Menunggu persetujuan Admin.');
@@ -225,7 +214,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  // ============ CETAK INVOICE ============
   Future<void> _printInvoice() async {
     if (_order == null) return;
     setState(() => _saving = true);
@@ -304,7 +292,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       child: ListView(
         padding: const EdgeInsets.all(AppSizes.lg),
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(AppSizes.md + 2),
             decoration: BoxDecoration(
@@ -365,8 +352,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ),
           ),
           const SizedBox(height: AppSizes.md),
-
-          // Pengiriman
           _card(
             'Pengiriman',
             Icons.local_shipping_rounded,
@@ -375,29 +360,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _qtyStat(
-                        'Total', o.totalQuantity, const Color(0xFF1976D2)),
-                  ),
+                      child: _qtyStat(
+                          'Total', o.totalQuantity, const Color(0xFF1976D2))),
                   Expanded(
-                    child: _qtyStat(
-                        'Terkirim', o.shippedQuantity, const Color(0xFF2E7D32)),
-                  ),
+                      child: _qtyStat('Terkirim', o.shippedQuantity,
+                          const Color(0xFF2E7D32))),
                 ],
               ),
               const SizedBox(height: AppSizes.md),
               Divider(color: Colors.grey.shade200, height: 1),
               const SizedBox(height: AppSizes.sm),
-              _infoRow('Total Uang',
-                  Formatters.currency(o.price * o.shippedQuantity)),
+              if (o.sisaQuantity > 0)
+                _infoRow('Sisa (Tidak Terjual)', '${o.sisaQuantity} pcs'),
+              if (o.returQuantity > 0)
+                _infoRow('Retur (Rusak)', '${o.returQuantity} pcs'),
+              _infoRow(
+                  'Total Uang',
+                  Formatters.currency(
+                      o.price * (o.shippedQuantity - o.returQuantity))),
               _infoRow('Harga Satuan', Formatters.currency(o.price)),
-              // ✅ Catatan akan muncul di sini setelah dikirim
               if (o.note != null && o.note!.isNotEmpty)
                 _infoRow('Catatan', o.note!),
             ],
           ),
           const SizedBox(height: AppSizes.md),
-
-          // Pembayaran
           _card(
             'Pembayaran',
             Icons.account_balance_wallet_rounded,
@@ -421,10 +407,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       const Text(
                         'Bukti Pembayaran',
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF6B7280),
-                        ),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B7280)),
                       ),
                       const SizedBox(height: 8),
                       _buildProofImage(o.paymentProof!),
@@ -434,8 +419,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ],
           ),
           const SizedBox(height: AppSizes.md),
-
-          // Bukti Kirim
           _card(
             'Bukti Pengiriman',
             Icons.photo_camera_rounded,
@@ -457,17 +440,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   child: Text(
                     'Belum ada foto bukti pengiriman',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: Color(0xFF9CA3AF),
-                    ),
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFF9CA3AF)),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: AppSizes.md),
-
-          // Produk
           if (o.items.isNotEmpty)
             _card(
               'Produk',
@@ -482,9 +462,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               width: 32,
                               height: 32,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFFF3E0),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(8)),
                               child: const Icon(Icons.restaurant_menu,
                                   size: 18, color: Color(0xFFE65100)),
                             ),
@@ -493,26 +472,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               child: Text(
                                 it.productName ?? '-',
                                 style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF111827),
-                                ),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF111827)),
                               ),
                             ),
                             Text(
                               '${it.quantity} pcs',
                               style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFE65100),
-                              ),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFE65100)),
                             ),
                           ],
                         ),
                       ))
                   .toList(),
             ),
-
           const SizedBox(height: AppSizes.xxl),
         ],
       ),
@@ -535,19 +511,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8)),
                 child: Icon(icon, size: 16, color: color),
               ),
               const SizedBox(width: 10),
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF111827),
-                ),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF111827)),
               ),
             ],
           ),
@@ -569,20 +543,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF6B7280),
-                fontWeight: FontWeight.w600,
-              ),
+                  fontSize: 12,
+                  color: Color(0xFF6B7280),
+                  fontWeight: FontWeight.w600),
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF111827),
-              ),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827)),
             ),
           ),
         ],
@@ -598,26 +570,20 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
+              color: color.withOpacity(0.1), shape: BoxShape.circle),
           child: Text(
             '$value',
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
+                fontSize: 16, fontWeight: FontWeight.w800, color: color),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF6B7280),
-          ),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF6B7280)),
         ),
       ],
     );
@@ -634,11 +600,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (bytes != null) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          child: Image.memory(
-            bytes,
-            fit: BoxFit.cover,
-            width: double.infinity,
-          ),
+          child: Image.memory(bytes, fit: BoxFit.cover, width: double.infinity),
         );
       }
     } catch (_) {}
@@ -669,10 +631,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2))
           ],
         ),
         child: SafeArea(
@@ -696,10 +657,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2))
           ],
         ),
         child: SafeArea(
@@ -724,10 +684,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2))
           ],
         ),
         child: SafeArea(
@@ -759,42 +718,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return OutlinedButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 18),
-        label: Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          ),
-        ),
+        label: Text(label,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
           side: BorderSide(color: color.withOpacity(0.4)),
           minimumSize: const Size.fromHeight(40),
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          ),
+              borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
         ),
       );
     }
     return FilledButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 18),
-      label: Text(
-        label,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
-      ),
+      label: Text(label,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
       style: FilledButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(40),
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        ),
+            borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
       ),
     );
   }

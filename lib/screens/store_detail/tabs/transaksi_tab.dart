@@ -58,7 +58,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
     }
   }
 
-  // ✅ FITUR 2: Cek FIFO (Harus bayar nota terlama dulu)
   bool _hasOlderUnpaidOrder(Order currentOrder) {
     return _all.any((o) =>
         !o.isPaid && o.date.isBefore(currentOrder.date) && o.totalAmount > 0);
@@ -127,15 +126,14 @@ class _TransaksiTabState extends State<TransaksiTab> {
   }
 
   Future<void> _askReturBeforePayment(Order order) async {
-    // ✅ FITUR 2: Cek FIFO sebelum retur
     if (_hasOlderUnpaidOrder(order)) {
       _snack(
           'Terdapat nota pada tanggal sebelumnya yang belum dibayar. Lunasi nota terlama terlebih dahulu!');
       return;
     }
 
-    int maxRetur =
-        order.shippedQuantity > 0 ? order.shippedQuantity : order.totalQuantity;
+    // ✅ Batas retur adalah sisa yang belum diretur
+    int maxRetur = order.shippedQuantity - order.returQuantity;
     int selectedQty = 0;
     bool isProcessing = false;
 
@@ -225,7 +223,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
                   const SizedBox(height: 8),
                   Center(
                     child: Text(
-                      'Total dikirim: $maxRetur pcs',
+                      'Batas maksimal retur: $maxRetur pcs',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -833,11 +831,8 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final isSelected = _selectedIds.contains(o.id);
     final canSelect = !o.isPaid;
 
-    final displayQty =
-        o.shippedQuantity > 0 ? o.shippedQuantity : o.totalQuantity;
-
-    // ✅ FITUR 2: Cek apakah nota pernah diretur
-    final isReturned = o.note?.contains('Diretur:') ?? false;
+    // ✅ Cek apakah nota pernah diretur
+    final isReturned = o.returQuantity > 0;
 
     return Material(
       color: Colors.white,
@@ -845,7 +840,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
       child: InkWell(
         onTap: canSelect
             ? () {
-                // ✅ FITUR 2: Jika sudah diretur, langsung centang (bayar) tanpa popup
+                // ✅ Jika sudah diretur, langsung centang (bayar) tanpa popup
                 if (isReturned) {
                   _toggleSelect(o.id);
                 } else {
@@ -946,13 +941,36 @@ class _TransaksiTabState extends State<TransaksiTab> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      // ✅ FITUR 3: Tampilkan Terkirim & Sisa
-                      Text(
-                        'Terkirim: $displayQty pcs · Sisa: ${o.remaining} pcs',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF6B7280),
-                        ),
+                      // ✅ TAMPILKAN TERKIRIM, SISA, DAN RETUR
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          Text(
+                            'Terkirim: ${o.shippedQuantity} pcs',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                          if (o.sisaQuantity > 0)
+                            Text(
+                              '· Sisa: ${o.sisaQuantity} pcs',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          if (o.returQuantity > 0)
+                            Text(
+                              '· Retur: ${o.returQuantity} pcs',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
