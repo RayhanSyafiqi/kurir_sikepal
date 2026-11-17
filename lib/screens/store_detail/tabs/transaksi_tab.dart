@@ -10,7 +10,7 @@ import '../../../core/utils/invoice_generator.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 import '../../../services/retur_service.dart';
-import '../../order/order_detail_screen.dart';
+import '../../order/order_detail_screen.dart'; // ✅ PASTIKAN BARIS INI ADA
 
 class TransaksiTab extends StatefulWidget {
   final String storeId;
@@ -132,9 +132,10 @@ class _TransaksiTabState extends State<TransaksiTab> {
       return;
     }
 
-    // ✅ Batas retur adalah sisa yang belum diretur
     int maxRetur = order.shippedQuantity - order.returQuantity;
-    int selectedQty = 0;
+    final returCtrl = TextEditingController(text: '0');
+    final sisaCtrl = TextEditingController(text: '${order.sisaQuantity}');
+    final reasonCtrl = TextEditingController();
     bool isProcessing = false;
 
     await showModalBottomSheet(
@@ -162,69 +163,42 @@ class _TransaksiTabState extends State<TransaksiTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   const Text(
-                    'Ada Barang Retur?',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827),
-                    ),
+                    'Laporan Transaksi',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Tentukan jumlah produk yang diretur sebelum melakukan pembayaran. Lewati jika tidak ada.',
+                    'Laporkan jika ada barang rusak (retur) atau tidak terjual (sisa).',
                     style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: selectedQty > 0 && !isProcessing
-                            ? () => setModalState(() => selectedQty--)
-                            : null,
-                        icon: const Icon(Icons.remove_circle_outline),
-                        iconSize: 36,
-                        color: const Color(0xFFD32F2F),
-                      ),
-                      SizedBox(
-                        width: 80,
-                        child: Text(
-                          '$selectedQty',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: selectedQty < maxRetur && !isProcessing
-                            ? () => setModalState(() => selectedQty++)
-                            : null,
-                        icon: const Icon(Icons.add_circle_outline),
-                        iconSize: 36,
-                        color: const Color(0xFF2E7D32),
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: returCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Jumlah Retur / Rusak (Maks: $maxRetur)',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Batas maksimal retur: $maxRetur pcs',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: reasonCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Alasan Retur (Misal: Rusak, Basi)',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: sisaCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Jumlah Sisa / Tidak Terjual',
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -240,11 +214,8 @@ class _TransaksiTabState extends State<TransaksiTab> {
                                 },
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
                           ),
-                          child: const Text('Tidak Ada Retur',
+                          child: const Text('Lewati',
                               style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
@@ -254,44 +225,42 @@ class _TransaksiTabState extends State<TransaksiTab> {
                           onPressed: isProcessing
                               ? null
                               : () async {
-                                  if (selectedQty == 0) {
-                                    Navigator.pop(ctx);
-                                    _toggleSelect(order.id);
+                                  final qty = int.tryParse(returCtrl.text) ?? 0;
+                                  final sisa = int.tryParse(sisaCtrl.text) ?? 0;
+                                  if (qty > maxRetur) {
+                                    _snack('Jumlah retur melebihi batas');
                                     return;
                                   }
                                   setModalState(() => isProcessing = true);
                                   try {
                                     await ReturService.process(
                                       orderId: order.id,
-                                      qty: selectedQty,
+                                      qty: qty,
+                                      sisaQuantity: sisa,
+                                      reason: reasonCtrl.text.trim(),
                                     );
                                     if (ctx.mounted) Navigator.pop(ctx);
-                                    _snack('Retur $selectedQty pcs diproses');
+                                    _snack('Laporan transaksi disimpan');
                                     _toggleSelect(order.id);
                                     _load();
                                   } catch (e) {
                                     if (ctx.mounted)
                                       setModalState(() => isProcessing = false);
-                                    _snack('Gagal retur: $e');
+                                    _snack('Gagal: $e');
                                   }
                                 },
                           style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF7043),
+                            backgroundColor: const Color(0xFF2E7D32),
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
                           ),
                           child: isProcessing
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
                                   child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
+                                      color: Colors.white, strokeWidth: 2),
                                 )
-                              : const Text('Simpan & Lanjut',
+                              : const Text('Simpan & Bayar',
                                   style:
                                       TextStyle(fontWeight: FontWeight.bold)),
                         ),
@@ -831,8 +800,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
     final isSelected = _selectedIds.contains(o.id);
     final canSelect = !o.isPaid;
 
-    // ✅ Cek apakah nota pernah diretur
-    final isReturned = o.returQuantity > 0;
+    final isReturned = o.returQuantity > 0 || o.sisaQuantity > 0;
 
     return Material(
       color: Colors.white,
@@ -840,7 +808,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
       child: InkWell(
         onTap: canSelect
             ? () {
-                // ✅ Jika sudah diretur, langsung centang (bayar) tanpa popup
                 if (isReturned) {
                   _toggleSelect(o.id);
                 } else {
@@ -931,7 +898,7 @@ class _TransaksiTabState extends State<TransaksiTab> {
                               decoration: BoxDecoration(
                                   color: Colors.red.shade50,
                                   borderRadius: BorderRadius.circular(4)),
-                              child: const Text('RETUR',
+                              child: const Text('LAPORAN',
                                   style: TextStyle(
                                       fontSize: 8,
                                       fontWeight: FontWeight.bold,
@@ -941,7 +908,6 @@ class _TransaksiTabState extends State<TransaksiTab> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      // ✅ TAMPILKAN TERKIRIM, SISA, DAN RETUR
                       Wrap(
                         spacing: 4,
                         children: [
