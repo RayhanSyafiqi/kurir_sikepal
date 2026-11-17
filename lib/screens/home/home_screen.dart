@@ -358,6 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
       map[p.name] = 0;
     }
     for (final o in _todayOrders) {
+      if (!['COMPLETED'].contains(o.status)) continue;
       for (final item in o.items) {
         final name = item.productName ?? 'Unknown';
         map[name] = (map[name] ?? 0) + item.quantity;
@@ -377,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return map;
   }
 
-  int get _totalQty => _productSummary.values.fold(0, (a, b) => a + b);
+  int get _totalQty => _productTargets.values.fold(0, (a, b) => a + b);
   int get _totalRemaining => _todayOrders.fold(0, (s, o) => s + o.remaining);
   double get _totalAmount =>
       _todayOrders.fold(0.0, (s, o) => s + o.totalAmount);
@@ -816,7 +817,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(
                         color: Colors.green, fontWeight: FontWeight.bold))
                 : Text('Kurang ${target - done}',
-                    style: TextStyle(
+                    style: const TextStyle(
                         color: Colors.red, fontWeight: FontWeight.bold)),
           );
         },
