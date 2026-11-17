@@ -4,11 +4,16 @@ import '../../widgets/yellow_header.dart';
 import 'tabs/today_tab.dart';
 import 'tabs/transaksi_tab.dart';
 import 'tabs/produk_tab.dart';
-import 'tabs/retur_tab.dart'; // ✅ Import ReturTab
+import 'tabs/retur_tab.dart';
 
 class StoreDetailScreen extends StatefulWidget {
   final Store store;
-  const StoreDetailScreen({super.key, required this.store});
+  final bool isWarning; // ✅ Tambahan parameter
+  const StoreDetailScreen({
+    super.key,
+    required this.store,
+    this.isWarning = false,
+  });
 
   @override
   State<StoreDetailScreen> createState() => _StoreDetailScreenState();
@@ -21,7 +26,6 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
   @override
   void initState() {
     super.initState();
-    // ✅ Ubah length menjadi 4 karena ada tab baru
     _tab = TabController(length: 4, vsync: this);
   }
 
@@ -41,12 +45,34 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
             title: widget.store.name ?? 'Detail Toko',
             subtitle: widget.store.city ?? widget.store.address ?? '',
           ),
-          // TabBar kuning
+
+          // ✅ Banner peringatan jika warning
+          // if (widget.isWarning)
+          //   Container(
+          //     width: double.infinity,
+          //     color: Colors.red.shade50,
+          //     padding: const EdgeInsets.all(12),
+          //     child: const Row(
+          //       children: [
+          //         Icon(Icons.warning_amber_rounded, color: Colors.red),
+          //         SizedBox(width: 8),
+          //         Expanded(
+          //           child: Text(
+          //             'Toko ini memiliki tagihan yang melewati tenggat. Harap lunasi sebelum membuat order baru.',
+          //             style: TextStyle(
+          //                 color: Colors.red,
+          //                 fontWeight: FontWeight.bold,
+          //                 fontSize: 12),
+          //           ),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+
           Container(
             color: const Color(0xFFFFB300),
             child: TabBar(
               controller: _tab,
-              // ✅ Gunakan isScrollable jika layar HP terlalu sempit untuk 4 tab
               isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
@@ -61,7 +87,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
                 Tab(text: 'HARI INI'),
                 Tab(text: 'TRANSAKSI'),
                 Tab(text: 'PRODUK'),
-                Tab(text: 'RETUR'), // ✅ Tab Baru
+                Tab(text: 'RETUR'),
               ],
             ),
           ),
@@ -69,10 +95,11 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
             child: TabBarView(
               controller: _tab,
               children: [
-                TodayTab(storeId: widget.store.id),
+                // ✅ Teruskan isWarning ke TodayTab (tempat biasanya ada tombol Buat Order)
+                TodayTab(storeId: widget.store.id, isWarning: widget.isWarning),
                 TransaksiTab(storeId: widget.store.id),
                 ProdukTab(storeId: widget.store.id),
-                ReturTab(storeId: widget.store.id), // ✅ Panggil ReturTab
+                ReturTab(storeId: widget.store.id),
               ],
             ),
           ),

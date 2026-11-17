@@ -155,7 +155,28 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  Future<void> _openStoreDetail(Store store) async {
+  // ✅ Teruskan status warning ke StoreDetailScreen
+  // ✅ Ubah method _openStoreDetail menjadi seperti ini:
+  Future<void> _openStoreDetail(Store store, bool isWarning) async {
+    // if (isWarning) {
+    //   showDialog(
+    //     context: context,
+    //     builder: (ctx) => AlertDialog(
+    //       shape: RoundedRectangleBorder(
+    //           borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+    //       title: const Text('Peringatan'),
+    //       content: const Text(
+    //           'Toko ini memiliki tagihan yang melewati tenggat pembayaran. Harap lunasi tagihan terlebih dahulu sebelum membuat order baru.'),
+    //       actions: [
+    //         TextButton(
+    //             onPressed: () => Navigator.pop(ctx),
+    //             child: const Text('Tutup')),
+    //       ],
+    //     ),
+    //   );
+    //   return; // ✅ Hentikan proses, jangan buka halaman detail
+    // }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -175,7 +196,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) _load();
   }
 
+  // ✅ Cek Warning sebelum membuat order
   Future<void> _onFabPressed() async {
+    // if (_warningStoresCount > 0) {
+    //   showDialog(
+    //     context: context,
+    //     builder: (ctx) => AlertDialog(
+    //       shape: RoundedRectangleBorder(
+    //           borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+    //       title: const Text('Peringatan'),
+    //       content: const Text(
+    //           'Terdapat nota yang melewati masa tenggat pembayaran. Lunasi tagihan terlebih dahulu sebelum membuat order baru.'),
+    //       actions: [
+    //         TextButton(
+    //             onPressed: () => Navigator.pop(ctx),
+    //             child: const Text('Tutup')),
+    //       ],
+    //     ),
+    //   );
+    //   return;
+    // }
+
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -389,7 +430,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
   }
 
-  // ✅ PERBAIKAN: Tgk Kemarin benar-benar hanya untuk tanggal kemarin (contoh: hari ini 16, maka hanya hitung tanggal 15)
   int get _totalNotaTagihanKemarin {
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
@@ -424,261 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return warningStoreIds.length;
   }
 
-  void _showKpiDetail(String title, Widget content) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.7,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
-            ),
-          ),
-          child: Column(
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(top: 16, bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg),
-                child: Row(
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w800),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.close),
-                    )
-                  ],
-                ),
-              ),
-              const Divider(),
-              Expanded(child: content),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showProductDetail() {
-    final targets = _productTargets;
-    final shipped = _productSummary;
-
-    _showKpiDetail(
-      'Detail Pengiriman Produk',
-      ListView.separated(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        itemCount: targets.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (_, i) {
-          final name = targets.keys.elementAt(i);
-          final target = targets[name] ?? 0;
-          final done = shipped[name] ?? 0;
-          final isDone = done >= target;
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor:
-                  isDone ? Colors.green.shade100 : Colors.orange.shade100,
-              child: Icon(
-                isDone ? Icons.check : Icons.inventory_2,
-                color: isDone ? Colors.green : Colors.orange,
-                size: 20,
-              ),
-            ),
-            title:
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Terkirim: $done / $target pcs'),
-            trailing: isDone
-                ? const Text('Selesai',
-                    style: TextStyle(
-                        color: Colors.green, fontWeight: FontWeight.bold))
-                : Text('Kurang ${target - done}',
-                    style: TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold)),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showLocationDetail({bool isWeekly = false}) {
-    final orders = isWeekly ? _weeklyOrders : _todayOrders;
-    final storeIds = orders.map((o) => o.store?.id).whereType<String>().toSet();
-    final storeList = _stores.where((s) => storeIds.contains(s.id)).toList();
-
-    _showKpiDetail(
-      isWeekly ? 'Detail Performa Mingguan' : 'Detail Lokasi Hari Ini',
-      ListView.separated(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        itemCount: storeList.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (_, i) {
-          final store = storeList[i];
-          final order = orders.firstWhere((o) => o.store?.id == store.id,
-              orElse: () => null as dynamic);
-          final isDone = order != null &&
-              (order.status == 'COMPLETED' || order.hasDeliveryProof);
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor:
-                  isDone ? Colors.green.shade100 : Colors.red.shade100,
-              child: Icon(
-                isDone ? Icons.check : Icons.location_off,
-                color: isDone ? Colors.green : Colors.red,
-                size: 20,
-              ),
-            ),
-            title: Text(store.name ?? '-',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(isDone ? 'Sudah dikunjungi' : 'Belum dikunjungi'),
-            trailing: isDone
-                ? const Text('Selesai',
-                    style: TextStyle(
-                        color: Colors.green, fontWeight: FontWeight.bold))
-                : const Text('Belum',
-                    style: TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold)),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showSisaDetail() {
-    final sisaOrders = _todayOrders.where((o) => o.sisaQuantity > 0).toList();
-
-    _showKpiDetail(
-      'Detail Sisa Produk (Tidak Terjual)',
-      ListView.separated(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        itemCount: sisaOrders.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (_, i) {
-          final order = sisaOrders[i];
-          return ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Color(0xFFFFF3E0),
-              child: Icon(Icons.inventory, color: Colors.orange, size: 20),
-            ),
-            title: Text(order.store?.name ?? '-',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Terkirim: ${order.shippedQuantity} pcs'),
-            trailing: Text(
-              'Sisa: ${order.sisaQuantity} pcs',
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Colors.orange),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showTagihanDetail({bool isYesterday = false}) {
-    var orders = _deliveredUnpaidOrders;
-
-    if (isYesterday) {
-      final now = DateTime.now();
-      final yesterday = now.subtract(const Duration(days: 1));
-
-      orders = orders.where((o) {
-        final d = o.date.toLocal();
-        return d.year == yesterday.year &&
-            d.month == yesterday.month &&
-            d.day == yesterday.day;
-      }).toList();
-    }
-
-    _showKpiDetail(
-      isYesterday ? 'Detail Tagihan Kemarin' : 'Detail Semua Nota Tagihan',
-      ListView.separated(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        itemCount: orders.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (_, i) {
-          final order = orders[i];
-          return ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Color(0xFFF3E5F5),
-              child:
-                  Icon(Icons.receipt_long, color: Color(0xFF7B1FA2), size: 20),
-            ),
-            title: Text(order.store?.name ?? '-',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-                '${Formatters.date(order.date)} • ${order.totalQuantity} pcs'),
-            trailing: Text(
-              Formatters.currency(order.totalAmount),
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showWarningDetail() {
-    final warningOrders = _deliveredUnpaidOrders.where((o) {
-      final daysLate = DateTime.now()
-          .difference(DateTime(o.date.year, o.date.month, o.date.day))
-          .inDays;
-      final pm = o.store?.paymentMethod?.toUpperCase() ?? 'DAILY';
-      if (pm == 'DAILY' || pm == 'HARIAN') return daysLate > 2;
-      if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') return daysLate > 8;
-      if (pm == 'MONTHLY' || pm == 'BULANAN') return daysLate > 15;
-      return false;
-    }).toList();
-
-    _showKpiDetail(
-      'Detail Toko Warning',
-      ListView.separated(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        itemCount: warningOrders.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (_, i) {
-          final order = warningOrders[i];
-          return ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Color(0xFFFFEBEE),
-              child: Icon(Icons.warning_rounded,
-                  color: Color(0xFFD32F2F), size: 20),
-            ),
-            title: Text(order.store?.name ?? '-',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-                'Tenggat: ${Formatters.paymentMethod(order.store?.paymentMethod)}'),
-            trailing: Text(
-              Formatters.currency(order.totalAmount),
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
+  // ... (Sisa kode UI tetap sama)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -933,7 +719,264 @@ class _HomeScreenState extends State<HomeScreen> {
             totalNota: totalNota,
             totalPiutang: piutang,
             isWarning: isWarning,
-            onTap: () => _openStoreDetail(store),
+            // ✅ Kirim status warning ke detail toko
+            onTap: () => _openStoreDetail(store, isWarning),
+          );
+        },
+      ),
+    );
+  }
+
+  // ... (Sisa method _showKpiDetail dll tetap sama, tidak perlu diubah)
+  void _showKpiDetail(String title, Widget content) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.7,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 16, bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg),
+                child: Row(
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    )
+                  ],
+                ),
+              ),
+              const Divider(),
+              Expanded(child: content),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showProductDetail() {
+    final targets = _productTargets;
+    final shipped = _productSummary;
+
+    _showKpiDetail(
+      'Detail Pengiriman Produk',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: targets.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final name = targets.keys.elementAt(i);
+          final target = targets[name] ?? 0;
+          final done = shipped[name] ?? 0;
+          final isDone = done >= target;
+
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor:
+                  isDone ? Colors.green.shade100 : Colors.orange.shade100,
+              child: Icon(
+                isDone ? Icons.check : Icons.inventory_2,
+                color: isDone ? Colors.green : Colors.orange,
+                size: 20,
+              ),
+            ),
+            title:
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Terkirim: $done / $target pcs'),
+            trailing: isDone
+                ? const Text('Selesai',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold))
+                : Text('Kurang ${target - done}',
+                    style: TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.bold)),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showLocationDetail({bool isWeekly = false}) {
+    final orders = isWeekly ? _weeklyOrders : _todayOrders;
+    final storeIds = orders.map((o) => o.store?.id).whereType<String>().toSet();
+    final storeList = _stores.where((s) => storeIds.contains(s.id)).toList();
+
+    _showKpiDetail(
+      isWeekly ? 'Detail Performa Mingguan' : 'Detail Lokasi Hari Ini',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: storeList.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final store = storeList[i];
+          final order = orders.firstWhere((o) => o.store?.id == store.id,
+              orElse: () => null as dynamic);
+          final isDone = order != null &&
+              (order.status == 'COMPLETED' || order.hasDeliveryProof);
+
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor:
+                  isDone ? Colors.green.shade100 : Colors.red.shade100,
+              child: Icon(
+                isDone ? Icons.check : Icons.location_off,
+                color: isDone ? Colors.green : Colors.red,
+                size: 20,
+              ),
+            ),
+            title: Text(store.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(isDone ? 'Sudah dikunjungi' : 'Belum dikunjungi'),
+            trailing: isDone
+                ? const Text('Selesai',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold))
+                : const Text('Belum',
+                    style: TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.bold)),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSisaDetail() {
+    final sisaOrders = _todayOrders.where((o) => o.sisaQuantity > 0).toList();
+
+    _showKpiDetail(
+      'Detail Sisa Produk (Tidak Terjual)',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: sisaOrders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = sisaOrders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFFFF3E0),
+              child: Icon(Icons.inventory, color: Colors.orange, size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Terkirim: ${order.shippedQuantity} pcs'),
+            trailing: Text(
+              'Sisa: ${order.sisaQuantity} pcs',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showTagihanDetail({bool isYesterday = false}) {
+    var orders = _deliveredUnpaidOrders;
+
+    if (isYesterday) {
+      final now = DateTime.now();
+      final yesterday = now.subtract(const Duration(days: 1));
+
+      orders = orders.where((o) {
+        final d = o.date.toLocal();
+        return d.year == yesterday.year &&
+            d.month == yesterday.month &&
+            d.day == yesterday.day;
+      }).toList();
+    }
+
+    _showKpiDetail(
+      isYesterday ? 'Detail Tagihan Kemarin' : 'Detail Semua Nota Tagihan',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: orders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = orders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFF3E5F5),
+              child:
+                  Icon(Icons.receipt_long, color: Color(0xFF7B1FA2), size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                '${Formatters.date(order.date)} • ${order.totalQuantity} pcs'),
+            trailing: Text(
+              Formatters.currency(order.totalAmount),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showWarningDetail() {
+    final warningOrders = _deliveredUnpaidOrders.where((o) {
+      final daysLate = DateTime.now()
+          .difference(DateTime(o.date.year, o.date.month, o.date.day))
+          .inDays;
+      final pm = o.store?.paymentMethod?.toUpperCase() ?? 'DAILY';
+      if (pm == 'DAILY' || pm == 'HARIAN') return daysLate > 2;
+      if (pm == 'WEEKLY' || pm == 'MINGGUAN_1') return daysLate > 8;
+      if (pm == 'MONTHLY' || pm == 'BULANAN') return daysLate > 15;
+      return false;
+    }).toList();
+
+    _showKpiDetail(
+      'Detail Toko Warning',
+      ListView.separated(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        itemCount: warningOrders.length,
+        separatorBuilder: (_, __) => const Divider(),
+        itemBuilder: (_, i) {
+          final order = warningOrders[i];
+          return ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFFFEBEE),
+              child: Icon(Icons.warning_rounded,
+                  color: Color(0xFFD32F2F), size: 20),
+            ),
+            title: Text(order.store?.name ?? '-',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                'Tenggat: ${Formatters.paymentMethod(order.store?.paymentMethod)}'),
+            trailing: Text(
+              Formatters.currency(order.totalAmount),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.red),
+            ),
           );
         },
       ),

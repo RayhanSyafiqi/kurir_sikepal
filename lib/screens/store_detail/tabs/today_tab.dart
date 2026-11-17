@@ -8,7 +8,13 @@ import '../widgets/order_card.dart';
 
 class TodayTab extends StatefulWidget {
   final String storeId;
-  const TodayTab({super.key, required this.storeId});
+  final bool isWarning; // ✅ field ditambahkan
+
+  const TodayTab({
+    super.key,
+    required this.storeId,
+    this.isWarning = false, // ✅ diubah jadi this.isWarning
+  });
 
   @override
   State<TodayTab> createState() => _TodayTabState();

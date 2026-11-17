@@ -30,18 +30,7 @@ class StoreSummaryCard extends StatelessWidget {
       color: isWarning ? const Color(0xFFFEF2F2) : Colors.white,
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
       child: InkWell(
-        onTap: isWarning
-            ? () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'Toko tidak dapat dikirim, karena melebihi batas tenggat pembayaran'),
-                    backgroundColor: Colors.red,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            : onTap,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         child: Container(
           decoration: BoxDecoration(

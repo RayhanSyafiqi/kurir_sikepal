@@ -58,10 +58,10 @@ class _TransaksiTabState extends State<TransaksiTab> {
     }
   }
 
-  bool _hasOlderUnpaidOrder(Order currentOrder) {
-    return _all.any((o) =>
-        !o.isPaid && o.date.isBefore(currentOrder.date) && o.totalAmount > 0);
-  }
+  // bool _hasOlderUnpaidOrder(Order currentOrder) {
+  //   return _all.any((o) =>
+  //       !o.isPaid && o.date.isBefore(currentOrder.date) && o.totalAmount > 0);
+  // }
 
   List<Order> get _deliveredOrders {
     return _all
@@ -126,11 +126,11 @@ class _TransaksiTabState extends State<TransaksiTab> {
   }
 
   Future<void> _askReturBeforePayment(Order order) async {
-    if (_hasOlderUnpaidOrder(order)) {
-      _snack(
-          'Terdapat nota pada tanggal sebelumnya yang belum dibayar. Lunasi nota terlama terlebih dahulu!');
-      return;
-    }
+    // if (_hasOlderUnpaidOrder(order)) {
+    //   _snack(
+    //       'Terdapat nota pada tanggal sebelumnya yang belum dibayar. Lunasi nota terlama terlebih dahulu!');
+    //   return;
+    // }
 
     int maxRetur = order.shippedQuantity - order.returQuantity;
     final returCtrl = TextEditingController(text: '0');
