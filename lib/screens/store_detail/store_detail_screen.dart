@@ -8,11 +8,12 @@ import 'tabs/retur_tab.dart';
 
 class StoreDetailScreen extends StatefulWidget {
   final Store store;
-  final bool isWarning; // ✅ Tambahan parameter
+  final String mode; // ✅ 'DELIVERY' atau 'TRANSACTION'
+
   const StoreDetailScreen({
     super.key,
     required this.store,
-    this.isWarning = false,
+    this.mode = 'DELIVERY', // Default
   });
 
   @override
@@ -26,7 +27,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    // Hanya butuh 2 tab
+    _tab = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -37,6 +39,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDelivery = widget.mode == 'DELIVERY';
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: Column(
@@ -45,35 +49,10 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
             title: widget.store.name ?? 'Detail Toko',
             subtitle: widget.store.city ?? widget.store.address ?? '',
           ),
-
-          // ✅ Banner peringatan jika warning
-          // if (widget.isWarning)
-          //   Container(
-          //     width: double.infinity,
-          //     color: Colors.red.shade50,
-          //     padding: const EdgeInsets.all(12),
-          //     child: const Row(
-          //       children: [
-          //         Icon(Icons.warning_amber_rounded, color: Colors.red),
-          //         SizedBox(width: 8),
-          //         Expanded(
-          //           child: Text(
-          //             'Toko ini memiliki tagihan yang melewati tenggat. Harap lunasi sebelum membuat order baru.',
-          //             style: TextStyle(
-          //                 color: Colors.red,
-          //                 fontWeight: FontWeight.bold,
-          //                 fontSize: 12),
-          //           ),
-          //         ),
-          //       ],
-          //     ),
-          //   ),
-
           Container(
             color: const Color(0xFFFFB300),
             child: TabBar(
               controller: _tab,
-              isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
@@ -83,24 +62,29 @@ class _StoreDetailScreenState extends State<StoreDetailScreen>
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.3,
               ),
-              tabs: const [
-                Tab(text: 'HARI INI'),
-                Tab(text: 'TRANSAKSI'),
-                Tab(text: 'PRODUK'),
-                Tab(text: 'RETUR'),
-              ],
+              tabs: isDelivery
+                  ? const [
+                      Tab(text: 'HARI INI'),
+                      Tab(text: 'PRODUK'),
+                    ]
+                  : const [
+                      Tab(text: 'TRANSAKSI'),
+                      Tab(text: 'RETUR'),
+                    ],
             ),
           ),
           Expanded(
             child: TabBarView(
               controller: _tab,
-              children: [
-                // ✅ Teruskan isWarning ke TodayTab (tempat biasanya ada tombol Buat Order)
-                TodayTab(storeId: widget.store.id, isWarning: widget.isWarning),
-                TransaksiTab(storeId: widget.store.id),
-                ProdukTab(storeId: widget.store.id),
-                ReturTab(storeId: widget.store.id),
-              ],
+              children: isDelivery
+                  ? [
+                      TodayTab(storeId: widget.store.id),
+                      ProdukTab(storeId: widget.store.id),
+                    ]
+                  : [
+                      TransaksiTab(storeId: widget.store.id),
+                      ReturTab(storeId: widget.store.id),
+                    ],
             ),
           ),
         ],

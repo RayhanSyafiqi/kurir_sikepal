@@ -7,6 +7,7 @@ class HomeSummaryCard extends StatelessWidget {
   final User? user;
   final Map<String, int> productSummary;
   final int totalQty;
+  final int totalInitQty;
   final int totalRemaining;
   final double totalAmount;
   final double totalPiutang;
@@ -39,6 +40,7 @@ class HomeSummaryCard extends StatelessWidget {
     required this.user,
     required this.productSummary,
     required this.totalQty,
+    required this.totalInitQty,
     required this.totalRemaining,
     required this.totalAmount,
     required this.totalPiutang,
@@ -323,19 +325,16 @@ class HomeSummaryCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: _totals('JUMLAH', '$totalQty'),
+                          child:
+                              _totals('TOTAL PENGIRIMAN AWAL', '$totalInitQty'),
                         ),
                         Expanded(
-                          child: _totals('SISA', '$totalRemaining'),
+                          child: _totals('TOTAL PENGIRIMAN REAL', '$totalQty'),
                         ),
                         Expanded(
-                          child: _totals(
-                            '%',
-                            totalQty == 0
-                                ? '0.00%'
-                                : '${(totalRemaining / totalQty * 100).toStringAsFixed(2)}%',
-                          ),
-                        ),
+                          child:
+                              _totals('SELISIH', '${totalInitQty - totalQty}'),
+                        )
                       ],
                     ),
                   ],
