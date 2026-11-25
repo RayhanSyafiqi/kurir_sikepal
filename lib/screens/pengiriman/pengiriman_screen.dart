@@ -29,24 +29,59 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
   List<Product> _products = [];
   List<Store> _stores = [];
 
+  // ✅ BARU: tanggal yang sedang dilihat (default: hari ini)
+  DateTime _selectedDate = DateTime.now();
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  // ============ HELPERS TANGGAL ============
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _formatDate(DateTime d) {
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu'
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final now = DateTime.now();
-      final start = DateTime.utc(now.year, now.month, now.day);
-      final end = DateTime.utc(now.year, now.month, now.day, 23, 59, 59);
+      // ✅ pakai _selectedDate, bukan DateTime.now()
+      final d = _selectedDate;
+      final start = DateTime.utc(d.year, d.month, d.day);
+      final end = DateTime.utc(d.year, d.month, d.day, 23, 59, 59);
 
       final results = await Future.wait([
         AuthService.me(),
         OrderService.getAll(startDate: start, endDate: end, limit: 200),
         ProductService.getAll(limit: 200),
-        StoreService.getAll(limit: 500, date: now),
+        StoreService.getAll(limit: 500, date: d),
       ]);
 
       if (mounted) {
@@ -65,6 +100,32 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ✅ BARU: buka date picker
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now, // tidak bisa pilih tanggal masa depan
+    );
+    if (picked != null && !_isSameDay(picked, _selectedDate)) {
+      setState(() => _selectedDate = picked);
+      _load();
+    }
+  }
+
+  // ✅ BARU: geser tanggal ±1 hari (tidak bisa lewat hari ini)
+  void _changeDate(int days) {
+    final next = _selectedDate.add(Duration(days: days));
+    final now = DateTime.now();
+    final tomorrow =
+        DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    if (!next.isBefore(tomorrow)) return;
+    setState(() => _selectedDate = next);
+    _load();
   }
 
   Order? _findTodayOrderForStore(String storeId) {
@@ -260,14 +321,101 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
     );
   }
 
+  // ✅ BARU: UI filter tanggal
+  Widget _buildDateFilter() {
+    final isToday = _isSameDay(_selectedDate, DateTime.now());
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(AppSizes.lg, AppSizes.md, AppSizes.lg, 0),
+      child: Row(
+        children: [
+          _dateNavBtn(Icons.chevron_left, () => _changeDate(-1)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                onTap: _pickDate,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 16, color: Color(0xFFB78600)),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          isToday
+                              ? 'Hari Ini • ${_formatDate(_selectedDate)}'
+                              : _formatDate(_selectedDate),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2937),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _dateNavBtn(
+              Icons.chevron_right, isToday ? null : () => _changeDate(1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateNavBtn(IconData icon, VoidCallback? onTap) {
+    final enabled = onTap != null;
+    return Material(
+      color: enabled ? Colors.white : const Color(0xFFF3F4F6),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Icon(
+            icon,
+            color: enabled ? const Color(0xFF1F2937) : const Color(0xFFD1D5DB),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isToday = _isSameDay(_selectedDate, DateTime.now());
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(80),
-        child:
-            YellowHeader(title: 'Pengiriman', subtitle: 'Daftar Toko & Order'),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(80),
+        child: YellowHeader(
+          title: 'Pengiriman',
+          subtitle: isToday
+              ? 'Daftar Toko & Order'
+              : 'Data ${_formatDate(_selectedDate)}',
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -277,12 +425,15 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: 100),
                 children: [
+                  // ✅ BARU: filter tanggal di paling atas
+                  _buildDateFilter(),
+                  const SizedBox(height: AppSizes.md),
                   PengirimanSummaryCard(
                     user: _user,
                     productSummary: _productSummary,
-                    totalQty: _totalQty, // Target total
+                    totalQty: _totalQty,
                     totalRemaining: _totalRemaining,
-                    totalShippedProducts: _totalShippedReal, // Real terkirim
+                    totalShippedProducts: _totalShippedReal,
                     totalStoresToday: _stores.length,
                     deliveredStores: _deliveredStores,
                     dailyPerformance: _dailyPerformance,
@@ -290,8 +441,9 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                   const SizedBox(height: AppSizes.lg),
                   _sectionHeader(
                     title: 'DAFTAR TOKO',
-                    subtitle:
-                        '${_deliveredStores}/${_stores.length} toko selesai hari ini',
+                    subtitle: isToday
+                        ? '${_deliveredStores}/${_stores.length} toko selesai hari ini'
+                        : '${_deliveredStores}/${_stores.length} toko selesai • ${_formatDate(_selectedDate)}',
                     icon: Icons.storefront_rounded,
                     trailing: _ProgressPill(
                       current: _deliveredStores,
@@ -303,7 +455,8 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                     const _EmptyState(
                       icon: Icons.store_mall_directory_outlined,
                       title: 'Belum ada toko',
-                      message: 'Tidak ada toko yang dijadwalkan hari ini.',
+                      message:
+                          'Tidak ada toko yang dijadwalkan pada tanggal ini.',
                     )
                   else
                     ..._sortedStores.map((store) {
@@ -339,17 +492,20 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                 ],
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _onFabPressed,
-        backgroundColor: const Color(0xFFFF7043),
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Buat Order',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      // ✅ FAB hanya muncul saat melihat tanggal hari ini
+      floatingActionButton: isToday
+          ? FloatingActionButton.extended(
+              onPressed: _onFabPressed,
+              backgroundColor: const Color(0xFFFF7043),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Buat Order',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
     );
   }
 
@@ -403,7 +559,6 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
   }
 }
 
-// (Sisa widget _StoreTileWrapper, _ProgressPill, dan _EmptyState tetap sama seperti sebelumnya)
 class _StoreTileWrapper extends StatelessWidget {
   final bool isDone;
   final Widget child;

@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-// import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/image_stamp.dart';
-import '../../core/utils/image_picker_helper.dart';
-// import '../../core/config/api_config.dart';
 
 class AttendanceSheet extends StatefulWidget {
   const AttendanceSheet({super.key});
@@ -43,8 +41,16 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
 
       if (!mounted) return;
 
-      // 2. Ambil Foto
-      final picked = await ImagePickerHelper.pickImage(context);
+      // 2. Ambil Foto (✅ LANGSUNG KAMERA DEPAN + KOMPRES)
+      final ImagePicker picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.camera, // Hanya kamera (tanpa galeri)
+        preferredCameraDevice: CameraDevice.front, // Paksa kamera depan
+        imageQuality: 50, // ✅ Kompres kualitas ke 50% agar tidak error server
+        maxWidth: 1080, // ✅ Batasi lebar gambar
+        maxHeight: 1080, // ✅ Batasi tinggi gambar
+      );
+
       if (picked == null) {
         setState(() => _loading = false);
         return;
@@ -122,7 +128,7 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Pastikan Anda berada di lokasi yang benar.\nSistem akan mengambil foto beserta titik koordinat GPS Anda.',
+            'Pastikan Anda berada di lokasi yang benar.\nSistem akan membuka kamera depan untuk mengambil foto beserta titik koordinat GPS Anda.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
           ),
@@ -137,8 +143,8 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
                       height: 20,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.camera_alt_rounded),
-              label: Text(_loading ? 'Memproses...' : 'Ambil Foto & Absen'),
+                  : const Icon(Icons.camera_front_rounded), // ✅ Ubah icon
+              label: Text(_loading ? 'Memproses...' : 'Buka Kamera & Absen'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFF57C00),
                 padding: const EdgeInsets.symmetric(vertical: 16),
