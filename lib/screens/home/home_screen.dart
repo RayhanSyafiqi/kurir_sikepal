@@ -3,12 +3,12 @@ import '../../core/constants/app_sizes.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_bottom_nav.dart';
-import '../attendance/attendance_sheet.dart';
-import '../pengiriman/pengiriman_screen.dart'; // Sesuaikan path
-import '../transaksi/transaksi_screen.dart'; // Sesuaikan path
+import '../pengiriman/pengiriman_screen.dart';
+import '../transaksi/transaksi_screen.dart';
 // import '../setoran/setoran_screen.dart';
 // import '../performa/performa_screen.dart';
 import '../menu/menu_screen.dart';
+import '../attendance/attendance_screen.dart'; // ✅ Hanya butuh ini sekarang
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -88,8 +88,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: _menuCard(
                                 'ABSENSI',
                                 Icons.how_to_reg_rounded,
-                                const Color(0xFF2E7D32), () async {
-                          await AttendanceSheet.show(context);
+                                const Color(0xFF2E7D32), () {
+                          // ✅ PERUBAHAN: Gunakan Navigator.push ke halaman baru
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const AttendanceScreen()),
+                          );
                         })),
                         const SizedBox(width: AppSizes.md),
                         Expanded(

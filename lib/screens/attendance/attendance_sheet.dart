@@ -24,6 +24,31 @@ class AttendanceSheet extends StatefulWidget {
 
 class _AttendanceSheetState extends State<AttendanceSheet> {
   bool _loading = false;
+  bool _isFetchingStatus = true;
+
+  // ✅ State untuk menyimpan data absensi hari ini
+  Map<String, dynamic>? _todayAttendance;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkTodayAttendance();
+  }
+
+  // ✅ Fungsi cek apakah sudah absen hari ini
+  Future<void> _checkTodayAttendance() async {
+    try {
+      final res = await ApiClient.get('/api/mobile/attendance/today');
+      if (res['success'] == true && res['data'] != null) {
+        setState(() => _todayAttendance = res['data']);
+      }
+    } catch (e) {
+      // Abaikan error (biasanya 404 jika belum absen atau belum ada API)
+      debugPrint("Belum absen atau gagal cek status: $e");
+    } finally {
+      if (mounted) setState(() => _isFetchingStatus = false);
+    }
+  }
 
   Future<void> _doAttendance() async {
     setState(() => _loading = true);
@@ -41,14 +66,14 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
 
       if (!mounted) return;
 
-      // 2. Ambil Foto (✅ LANGSUNG KAMERA DEPAN + KOMPRES)
+      // 2. Ambil Foto
       final ImagePicker picker = ImagePicker();
       final XFile? picked = await picker.pickImage(
-        source: ImageSource.camera, // Hanya kamera (tanpa galeri)
-        preferredCameraDevice: CameraDevice.front, // Paksa kamera depan
-        imageQuality: 50, // ✅ Kompres kualitas ke 50% agar tidak error server
-        maxWidth: 1080, // ✅ Batasi lebar gambar
-        maxHeight: 1080, // ✅ Batasi tinggi gambar
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 50,
+        maxWidth: 1080,
+        maxHeight: 1080,
       );
 
       if (picked == null) {
@@ -67,7 +92,7 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
 
       // 4. Kirim ke API
       final b64 = base64Encode(stamped);
-      await ApiClient.post(
+      final postRes = await ApiClient.post(
         '/api/mobile/attendance',
         body: {
           'photo': b64,
@@ -77,7 +102,12 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context, true);
+
+      // ✅ Setelah sukses, timpa state _todayAttendance agar UI langsung berubah jadi "Menunggu"
+      setState(() {
+        _todayAttendance = postRes['data'] ?? {'status': 'PENDING'};
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Absensi berhasil dikirim!'),
@@ -116,22 +146,73 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
               borderRadius: BorderRadius.circular(3),
             ),
           ),
-          const Icon(Icons.how_to_reg_rounded,
-              size: 64, color: Color(0xFFF57C00)),
-          const SizedBox(height: 16),
-          const Text(
-            'Absensi Masuk',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF111827)),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Pastikan Anda berada di lokasi yang benar.\nSistem akan membuka kamera depan untuk mengambil foto beserta titik koordinat GPS Anda.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-          ),
+
+          if (_isFetchingStatus)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: CircularProgressIndicator(),
+            )
+          else if (_todayAttendance != null)
+            _buildStatusUI() // ✅ Tampilkan UI jika sudah absen
+          else
+            _buildFormUI(), // ✅ Tampilkan UI kamera jika belum absen
+
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // UI JIKA SUDAH ABSEN
+  // ==========================================
+  Widget _buildStatusUI() {
+    final status = _todayAttendance!['status'];
+
+    Color iconColor;
+    IconData iconData;
+    String title;
+    String subtitle;
+
+    if (status == 'APPROVED') {
+      iconColor = Colors.green;
+      iconData = Icons.check_circle_rounded;
+      title = 'Absensi Disetujui';
+      subtitle =
+          'Terima kasih, absensi Anda hari ini sudah diverifikasi oleh Admin.';
+    } else if (status == 'REJECTED') {
+      iconColor = Colors.red;
+      iconData = Icons.cancel_rounded;
+      title = 'Absensi Ditolak';
+      subtitle =
+          'Maaf, absensi Anda ditolak. Silakan hubungi admin atau lakukan absen ulang.';
+    } else {
+      // PENDING
+      iconColor = const Color(0xFFF57C00);
+      iconData = Icons.hourglass_top_rounded;
+      title = 'Menunggu Persetujuan';
+      subtitle =
+          'Absensi Anda sudah terkirim dan sedang menunggu verifikasi dari Admin.';
+    }
+
+    return Column(
+      children: [
+        Icon(iconData, size: 64, color: iconColor),
+        const SizedBox(height: 16),
+        Text(
+          title,
+          style: TextStyle(
+              fontSize: 20, fontWeight: FontWeight.w800, color: iconColor),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+        ),
+
+        // Tampilkan tombol absen ulang JIKA DITOLAK
+        if (status == 'REJECTED') ...[
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -143,17 +224,75 @@ class _AttendanceSheetState extends State<AttendanceSheet> {
                       height: 20,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.camera_front_rounded), // ✅ Ubah icon
-              label: Text(_loading ? 'Memproses...' : 'Buka Kamera & Absen'),
+                  : const Icon(Icons.refresh_rounded),
+              label: Text(_loading ? 'Memproses...' : 'Absen Ulang'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFF57C00),
+                backgroundColor: Colors.red,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
-          const SizedBox(height: 12),
-        ],
-      ),
+        ] else ...[
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              child:
+                  const Text('Tutup', style: TextStyle(color: Colors.black87)),
+            ),
+          )
+        ]
+      ],
+    );
+  }
+
+  // ==========================================
+  // UI JIKA BELUM ABSEN (FORM KAMERA)
+  // ==========================================
+  Widget _buildFormUI() {
+    return Column(
+      children: [
+        const Icon(Icons.how_to_reg_rounded,
+            size: 64, color: Color(0xFFF57C00)),
+        const SizedBox(height: 16),
+        const Text(
+          'Absensi Masuk',
+          style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827)),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Pastikan Anda berada di lokasi yang benar.\nSistem akan membuka kamera depan untuk mengambil foto beserta titik koordinat GPS Anda.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _loading ? null : _doAttendance,
+            icon: _loading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.camera_front_rounded),
+            label: Text(_loading ? 'Memproses...' : 'Buka Kamera & Absen'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFF57C00),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
