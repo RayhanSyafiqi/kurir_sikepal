@@ -41,7 +41,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  // ✅ Logika Absen (dipindah dari sheet)
+  // ✅ Logika Absen
   Future<void> _doAttendance() async {
     setState(() => _isSubmitting = true);
     try {
@@ -79,6 +79,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
 
       final b64 = base64Encode(stamped);
+
+      // ✅ FIX WARNING: Tangkap response dari API
       final postRes = await ApiClient.post(
         '/api/mobile/attendance',
         body: {
@@ -90,14 +92,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       if (!mounted) return;
 
-      // Refresh data setelah absen sukses
-      _fetchAttendance();
+      // ✅ FIX WARNING: Cek apakah response sukses
+      if (postRes['success'] == true) {
+        // Refresh data setelah absen sukses
+        _fetchAttendance();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Absensi berhasil dikirim!'),
-            backgroundColor: Colors.green),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Absensi berhasil dikirim!'),
+              backgroundColor: Colors.green),
+        );
+      } else {
+        throw Exception(postRes['error'] ?? 'Gagal mengirim absensi ke server');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
